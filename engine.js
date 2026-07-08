@@ -339,6 +339,75 @@ function buyFemales(r, w, tierKey, nLots) {
   return head;
 }
 
+// ---------- co-opetition: team-to-team deals (B1/B2/B3, Phase 2) ----------
+// The doc's "biggest structural gap": the same rivals from the sealed auction can become
+// allies for one transaction. A deal is proposed and accepted during the board (status only,
+// in the deals table) and SETTLES here at resolution, before productionYear, so a shared
+// straw or a co-funded project still shapes this year's production and a snapshot-based
+// lock-in never clobbers the transfer. Human-only: the scripted AI never deals, so the
+// AI-vs-AI balance gate is untouched (executeDeal is never reached from playGame).
+const DEAL = {
+  coopCapexMult: 0.6,     // each partner pays 60% of the solo capex on a shared infrastructure project
+  embryoBlendHead: 45,    // an embryo/flush share moves the buyer's genetics as if ~45 head of the seller's herd
+};
+// find the buyer-side bull that matches a traded lot's stable fields (state bulls carry no id)
+function findBullIdx(r, ref) {
+  if (!r.bulls || !ref) return -1;
+  return r.bulls.findIndex(b => b.boughtYear === ref.boughtYear && b.tier === ref.tier
+    && Math.round(b.paid || 0) === Math.round(ref.paid || 0));
+}
+// apply an accepted deal to both revived states. Returns { ok, note }; a stale/invalid deal
+// (bull already gone, partner short on cash) no-ops with ok:false so resolution never throws.
+function executeDeal(proposer, partner, deal, w) {
+  const t = deal.type, terms = deal.terms || {};
+  if (t === 'bull_trade') {
+    const price = Math.max(0, terms.price || 0);
+    const idx = findBullIdx(proposer, terms.bull);
+    if (idx < 0) return { ok: false, note: 'bull no longer owned' };
+    if (partner.cash < price) return { ok: false, note: 'partner short on cash' };
+    const bull = proposer.bulls.splice(idx, 1)[0];
+    bull.covHead = partner.herd * bullCoverage(partner);  // coverage re-anchors to the new owner's herd
+    partner.bulls = partner.bulls || []; partner.bulls.push(bull);
+    partner.cash -= price; proposer.cash += price;
+    return { ok: true, note: 'bull + $' + Math.round(price) + ' transferred' };
+  }
+  if (t === 'semen_split') {
+    const price = Math.max(0, terms.price || 0);
+    if (!terms.traits) return { ok: false, note: 'no sire' };
+    // one shared collection: both herds breed to the same true genetics this season, split cost
+    const book = (r, pay) => {
+      if (r.semen && r.semen.boughtYear === w.year) return false; // already has a program
+      if (r.cash < pay) return false;
+      const truth = {}; TRAITS.forEach(k => truth[k] = clamp(terms.traits[k] + gauss() * SEMEN.truthNoise, 1, 10));
+      const base = SEMEN.conceptionMean + (r.tech.has('genomic') ? SEMEN.genomicConceptionBonus : 0);
+      const conception = clamp(base + gauss() * SEMEN.conceptionSd, 0.30, 0.92);
+      r.semen = { name: terms.name, tier: terms.tier, traits: terms.traits, truth, boughtYear: w.year, paid: pay, conception };
+      r.cash -= pay; return true;
+    };
+    const a = book(proposer, price / 2), b = book(partner, price - price / 2);
+    return { ok: a || b, note: 'shared AI straw' };
+  }
+  if (t === 'infra_coop') {
+    const tech = terms.tech;
+    if (!TECHS[tech]) return { ok: false, note: 'unknown tech' };
+    const cost = Math.round(TECHS[tech].capex * DEAL.coopCapexMult);
+    const add = r => { if (!r.tech.has(tech) && r.cash >= cost) { r.tech.add(tech); r.cash -= cost; return true; } return false; };
+    const a = add(proposer), b = add(partner);
+    return { ok: a || b, note: 'co-funded ' + tech };
+  }
+  if (t === 'complementor') {
+    // embryo / flush share: the proposer buys genetic influence from the partner's herd for
+    // cash; the partner's genetics become a sellable asset to a rival (co-opetition)
+    const price = Math.max(0, terms.price || 0);
+    if (proposer.cash < price) return { ok: false, note: 'proposer short on cash' };
+    const head = DEAL.embryoBlendHead;
+    TRAITS.forEach(k => { proposer.g[k] = (proposer.g[k] * proposer.herd + partner.g[k] * head) / (proposer.herd + head); });
+    proposer.cash -= price; partner.cash += price;
+    return { ok: true, note: 'embryo share' };
+  }
+  return { ok: false, note: 'unknown deal type' };
+}
+
 // drought Markov chain (2013-2025 western DSI)
 const DROUGHT_T = {
   mild:     { severe: 0.15, moderate: 0.35 },
@@ -1033,6 +1102,8 @@ if (typeof window !== 'undefined') {
     makeFemaleBoard,
     buyFemales,
     femaleTierTraits,
+    DEAL,
+    executeDeal,
     DROUGHT_T,
     SHOCKS,
     TRAITS,
@@ -1094,6 +1165,8 @@ if (typeof window !== 'undefined') {
     makeFemaleBoard,
     buyFemales,
     femaleTierTraits,
+    DEAL,
+    executeDeal,
     DROUGHT_T,
     SHOCKS,
     TRAITS,

@@ -137,6 +137,7 @@
         <thead><tr><th>Bull</th><th>Tier</th><th>Anchor</th><th>Range</th><th>Bids In</th><th>Winner</th><th>Price</th></tr></thead>
         <tbody id="tbodyBulls"></tbody>
       </table>
+      <div id="adminDeals" style="margin-top:1rem"></div>
       <div class="row" style="margin-top:1rem">
         <button id="btnResolve" onclick="resolveAuction()">Resolve Year</button>
         <button id="btnNextYear" onclick="nextYear()" style="display:none" class="secondary">Advance to Next Year</button>
@@ -582,6 +583,31 @@ async function refreshAuction() {
   allBids.forEach(b => { bidCount[b.bull_id] = (bidCount[b.bull_id] || 0) + 1; });
 
   renderAuction(BULLS, bidCount, humanCount, teamMap);
+  renderAdminDeals(teamMap);
+}
+
+// instructor view of this year's team-to-team deals, with a void control
+async function renderAdminDeals(teamMap) {
+  const el = document.getElementById('adminDeals'); if (!el) return;
+  const { data: deals } = await supa.from('deals').select('*')
+    .eq('game_id', GAME_ID).eq('year', CUR_YEAR).in('status', ['proposed', 'accepted']).order('created_at');
+  if (!deals || !deals.length) { el.innerHTML = ''; return; }
+  const nm = id => (teamMap[id] ? esc(teamMap[id].name) : 'a team');
+  const label = { bull_trade: 'bull trade', semen_split: 'AI-straw split', infra_coop: 'co-funded project', complementor: 'embryo share' };
+  const rows = deals.map(d => {
+    const t = d.terms || {};
+    const amt = t.price != null ? ' ($' + Math.round(t.price).toLocaleString() + ')' : '';
+    return `<tr><td>${nm(d.proposer_team)} &rarr; ${nm(d.partner_team)}</td>` +
+      `<td>${label[d.type] || d.type}${amt}</td>` +
+      `<td><span class="tag">${d.status}</span></td>` +
+      `<td><button class="secondary" style="padding:0.2rem 0.6rem;font-size:0.75rem" onclick="voidDeal('${d.id}')">Void</button></td></tr>`;
+  }).join('');
+  el.innerHTML = `<div style="font-family:var(--mono);font-size:0.7rem;color:var(--accent);letter-spacing:0.06em;margin-bottom:0.3rem">TEAM DEALS THIS YEAR (settle at resolve)</div>` +
+    `<table style="width:100%;font-size:0.82rem"><thead><tr><th>Between</th><th>Deal</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+async function voidDeal(id) {
+  await supa.from('deals').update({ status: 'voided' }).eq('id', id);
+  refreshAuction();
 }
 
 function renderAuction(bulls, bidCount, humanCount, teamMap) {
@@ -681,7 +707,8 @@ async function resolveAuction() {
     }
   }
 
-  // Run production year for all teams
+  // Settle accepted team-to-team deals, then run the production year for all teams
+  await settleDeals(world);
   await runProductionYear(world);
 
   await supa.from('games').update({ phase: 'resolve' }).eq('id', GAME_ID);
@@ -693,6 +720,35 @@ async function resolveAuction() {
   document.getElementById('btnNextYear').style.display = '';
   refreshAuction();
   renderLeaderboard();
+}
+
+// Settle accepted co-opetition deals for this year, BEFORE productionYear, so a traded
+// bull / shared AI straw / co-funded project shapes this year's production. Deals were
+// proposed and accepted during the board; this is where assets and cash actually move
+// between the two teams. A stale or unaffordable deal voids without throwing.
+async function settleDeals(world) {
+  const [{ data: deals }, { data: teams }] = await Promise.all([
+    supa.from('deals').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR).eq('status', 'accepted').order('created_at'),
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+  ]);
+  if (!deals || !deals.length) return;
+  const w2 = Object.assign({}, world, { year: CUR_YEAR });
+  const stateMap = {};
+  (teams || []).forEach(t => { if (t.state) stateMap[t.id] = reviveState(t.state); });
+  const touched = new Set();
+  for (const d of deals) {
+    const proposer = stateMap[d.proposer_team], partner = stateMap[d.partner_team];
+    if (!proposer || !partner) { await supa.from('deals').update({ status: 'voided' }).eq('id', d.id); continue; }
+    let res;
+    try { res = RanchEngine.executeDeal(proposer, partner, d, w2); }
+    catch (e) { res = { ok: false, note: e.message }; }
+    await supa.from('deals').update({ status: res && res.ok ? 'settled' : 'voided' }).eq('id', d.id);
+    if (res && res.ok) { touched.add(d.proposer_team); touched.add(d.partner_team); }
+    await logDecision(d.proposer_team, 'deal_settled', { type: d.type, partner: d.partner_team, ok: !!(res && res.ok), note: res && res.note });
+  }
+  for (const id of touched) {
+    await supa.from('teams').update({ state: JSON.parse(JSON.stringify(stateMap[id], setReplacer)) }).eq('id', id);
+  }
 }
 
 async function runProductionYear(world) {
