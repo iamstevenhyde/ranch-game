@@ -34,6 +34,8 @@
   header h1 { font-family: var(--serif); font-size: 1.25rem; font-weight: 600; }
   header .badge { font-size: 0.65rem; background: var(--accent); color: #1a1510; padding: 0.15rem 0.45rem; border-radius: 3px; font-family: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
   main { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem; }
+  /* the year page is a wider control board; every other screen stays phone-narrow */
+  main.control { max-width: 900px; }
   section { margin-bottom: 1.8rem; }
   h2 { font-family: var(--mono); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 0.9rem; }
   .card { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 1rem 1.2rem; }
@@ -82,6 +84,21 @@
   .kpi-fill { height: 100%; background: var(--sage); border-radius: 4px; }
   .kpi-fill.pri { background: var(--accent); }
   .dec-block { margin-bottom: 1.1rem; }
+  /* control board: decision levers laid out as a responsive grid. One column on a phone
+     (auto-fit collapses below the min track), two-plus columns on a tablet or projector. */
+  .control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 0.2rem 1.5rem; align-items: start; }
+  .control-grid .dec-block { margin-bottom: 1rem; }
+  .dec-block.span2 { grid-column: 1 / -1; }
+  .ops-summary { background: var(--surface2); color: var(--sand); border: 1px solid var(--border); border-radius: 5px; padding: 0.7rem 0.95rem; font-size: 0.84rem; margin-top: 0.6rem; }
+  .ops-summary b { color: var(--tan); font-family: var(--mono); }
+  /* cow market rows: fixed-price offer board */
+  .cow-row { display: flex; align-items: center; gap: 0.6rem; border: 1px solid var(--border); border-radius: 5px; background: var(--surface2); padding: 0.5rem 0.65rem; margin-bottom: 0.4rem; }
+  .cow-row .cow-info { flex: 1; min-width: 0; }
+  .cow-row .cow-t { font-weight: 700; font-size: 0.83rem; color: var(--text); }
+  .cow-row .cow-d { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); margin-top: 0.1rem; }
+  .stepper { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
+  .stepper button { width: 28px; height: 28px; padding: 0; font-size: 1rem; line-height: 1; border-radius: 4px; }
+  .stepper .qty { min-width: 20px; text-align: center; font-family: var(--mono); font-weight: 700; color: var(--tan); }
   .dec-head { font-family: var(--serif); font-weight: 600; font-size: 1rem; color: var(--text); margin-bottom: 0.15rem; }
   .dec-sub { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.5rem; }
   .opt-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
@@ -167,38 +184,50 @@
         </div>
       </div>
 
-      <div class="dec-block">
-        <div class="dec-head">Herd</div>
-        <div class="dec-sub">Irreversible for the year. Cows bought now cannot be un-bought before the shock hits.</div>
-        <div class="opt-row" id="optHerd"></div>
-      </div>
-      <div class="dec-block">
-        <div class="dec-head">Debt</div>
-        <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
-        <div class="opt-row" id="optDebt"></div>
-      </div>
-      <div class="dec-block">
-        <div class="dec-head">Technology</div>
-        <div class="dec-sub">Adopt at most one. Fit is how well it suits your county.</div>
-        <div id="techPills"></div>
-      </div>
-      <div class="dec-block">
-        <div class="dec-head">Buy Genetics (AI semen)</div>
-        <div class="dec-sub">Buy proven AI semen instead of chasing a bull at auction. Cheaper, but it does not always settle.</div>
-        <div id="semenOffers"></div>
-      </div>
-      <div class="dec-block">
-        <div class="dec-head">Sell Genetics (your bulls)</div>
-        <div class="dec-sub">Open a proven bull you own to the national semen market and set your price per straw. Demand follows quality and price.</div>
-        <div id="semenSell"></div>
-      </div>
-      <div class="dec-block">
-        <div class="dec-head">Rendering / Tallow</div>
-        <div class="dec-sub">Sign a rendering contract to sell tallow off your cull cows. Byproduct income that rises in drought, when you cull more and calf checks shrink.</div>
-        <div id="tallowChoice"></div>
+      <div class="control-grid">
+        <div class="dec-block">
+          <div class="dec-head">Herd</div>
+          <div class="dec-sub">Buy or sell cows for the year. Irreversible before the shock hits.</div>
+          <div class="opt-row" id="optHerd"></div>
+        </div>
+        <div class="dec-block">
+          <div class="dec-head">Culling</div>
+          <div class="dec-sub">How hard you cull the bottom of the herd. Culling deep drifts your genetics up over the years but sells cows now and shrinks the herd.</div>
+          <div class="opt-row" id="optCull"></div>
+        </div>
+        <div class="dec-block span2">
+          <div class="dec-head">Cow Market</div>
+          <div class="dec-sub">Buy replacement females outright at the posted price. Registered and elite females raise your herd genetics; commercial females are headcount. A few head against a herd of hundreds moves genetics slowly, the reason a bull is the cheaper lever.</div>
+          <div id="cowMarket"></div>
+        </div>
+        <div class="dec-block">
+          <div class="dec-head">Debt</div>
+          <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
+          <div class="opt-row" id="optDebt"></div>
+        </div>
+        <div class="dec-block">
+          <div class="dec-head">Technology</div>
+          <div class="dec-sub">Adopt at most one. Fit is how well it suits your county.</div>
+          <div id="techPills"></div>
+        </div>
+        <div class="dec-block">
+          <div class="dec-head">Buy Genetics (AI semen)</div>
+          <div class="dec-sub">Buy proven AI semen instead of chasing a bull at auction. Cheaper, but it does not always settle.</div>
+          <div id="semenOffers"></div>
+        </div>
+        <div class="dec-block">
+          <div class="dec-head">Sell Genetics (your bulls)</div>
+          <div class="dec-sub">Open a proven bull you own to the national semen market and set your price per straw. Demand follows quality and price.</div>
+          <div id="semenSell"></div>
+        </div>
+        <div class="dec-block span2">
+          <div class="dec-head">Rendering / Tallow</div>
+          <div class="dec-sub">Sign a rendering contract to sell tallow off your cull cows. Byproduct income that rises in drought, when you cull more and calf checks shrink.</div>
+          <div id="tallowChoice"></div>
+        </div>
       </div>
 
-      <div class="consequence" id="boardConsequence"></div>
+      <div class="ops-summary" id="boardConsequence"></div>
     </div>
   </section>
 
@@ -394,6 +423,9 @@ async function handlePhaseChange(game) {
   CUR_YEAR = game.year;
   const seq = ++PHASE_SEQ;
   setPhaseChip(PHASE);
+  // the year page (board/auction) widens into a control board; every other screen is phone-narrow
+  const mainEl = document.querySelector('main');
+  if (mainEl) mainEl.classList.toggle('control', PHASE === 'board' || PHASE === 'auction');
 
   if (PHASE === 'market') {
     document.getElementById('archetypeLabel').textContent = RanchEngine.ARCHETYPES[ARCHETYPE]?.label || ARCHETYPE;
@@ -520,8 +552,8 @@ const ST_PATHS = {
 };
 const ST_LBL = { OR: { x: 90, y: 140 }, ID: { x: 210, y: 190 }, MT: { x: 312, y: 88 }, WY: { x: 358, y: 192 }, CO: { x: 374, y: 298 }, NV: { x: 96, y: 292 }, UT: { x: 212, y: 336 } };
 
-let boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: false };
-let boardBaseSt = null, boardWorld = null, boardSemen = [];
+let boardChoice = { herd: 'hold', cull: 'normal', cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: false };
+let boardBaseSt = null, boardWorld = null, boardSemen = [], boardFemales = [];
 
 // the ranch as it WILL be after this year's operations are applied (from the year
 // snapshot), so the bid exposure and consequence lines draw on post-operations cash
@@ -532,7 +564,7 @@ function projectedRanch() {
   if (!r) return null;
   const n = choiceNumbers();
   applyDecisions(r, boardWorld, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
-  applySemenSell(r); applyTallow(r);
+  applyCowBuy(r, boardWorld); applyCull(r); applySemenSell(r); applyTallow(r);
   return r;
 }
 // set b.semenPrice on owned proven bulls from this year's sell choices (reset first so a
@@ -545,6 +577,18 @@ function applySemenSell(r) {
   for (const [i, price] of Object.entries(boardChoice.semenSell || {})) {
     const b = r.bulls && r.bulls[i];
     if (b && RanchEngine.canSellSemen(b)) b.semenPrice = RanchEngine.clamp(Number(price) || 0, 5, 100);
+  }
+}
+// set this year's cull intensity (read by the engine at production; the genetic lift lands
+// at resolution, so the cull cards below telegraph the effect rather than the ops summary)
+function applyCull(r) {
+  if (boardChoice.cull && RanchEngine.CULL[boardChoice.cull]) r.cullMode = boardChoice.cull;
+}
+// buy the queued replacement-female lots outright; buyFemales adds head + cash + blends
+// genetics, honoring land, cash, and the integration cap at call time (post-expansion cash)
+function applyCowBuy(r, w) {
+  for (const [tier, n] of Object.entries(boardChoice.cowBuy || {})) {
+    if (n > 0) RanchEngine.buyFemales(r, w, tier, n);
   }
 }
 
@@ -603,8 +647,9 @@ async function refreshBoard(world) {
   if (!baseRaw) { baseRaw = JSON.stringify(team.state); localStorage.setItem(boardKey(), baseRaw); }
   boardBaseSt = reviveState(JSON.parse(baseRaw));
   boardWorld = world || RanchEngine.newWorld();
-  boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: !!(reviveState(JSON.parse(baseRaw)).tallowContract) };
+  boardChoice = { herd: 'hold', cull: 'normal', cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: !!(reviveState(JSON.parse(baseRaw)).tallowContract) };
   boardSemen = (boardWorld && boardWorld.semenCatalog) || [];
+  boardFemales = RanchEngine.makeFemaleBoard(boardWorld);
   const st = boardBaseSt, w = boardWorld, reg = RanchEngine.REGIONS[st.region];
   const sev = RanchEngine.droughtSeverity(w, st.region);
 
@@ -658,7 +703,7 @@ async function refreshBoard(world) {
     `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`
   ).join('');
 
-  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
+  renderHerdOptions(); renderCullOptions(); renderCowMarket(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
 }
 
@@ -841,6 +886,61 @@ function renderHerdOptions() {
   };
   document.getElementById('optHerd').innerHTML = opt('destock') + opt('hold') + opt('grow') + opt('push');
 }
+// ---- Culling: how hard you select the bottom of the herd (A1) ----
+function renderCullOptions() {
+  const el = document.getElementById('optCull'); if (!el) return;
+  const st = boardBaseSt, w = boardWorld;
+  const gAvg = RanchEngine.avg(RanchEngine.TRAITS.map(t => st.g[t]));
+  const feeder = Math.pow(w.feederIdx || 1, 0.54);            // FEEDER_ELASTICITY
+  const ceil = RanchEngine.CULL_CEIL, normalRate = RanchEngine.CULL.normal.rate;
+  const card = (mode, title) => {
+    const cm = RanchEngine.CULL[mode];
+    const cull = Math.round(st.herd * cm.rate);
+    const herdDelta = Math.round(st.herd * cm.herd);
+    const extraCash = Math.round(st.herd * Math.max(0, cm.rate - normalRate) * 1150 * feeder);
+    const drift = Math.max(0, (ceil - gAvg) * cm.gain);
+    let d = 'Cull ~' + cull.toLocaleString() + ' head. ';
+    if (herdDelta > 0) d += 'Herd +' + herdDelta.toLocaleString() + '. ';
+    else if (herdDelta < 0) d += 'Herd ' + herdDelta.toLocaleString() + '. ';
+    else d += 'Herd holds. ';
+    if (extraCash > 0) d += '+$' + extraCash.toLocaleString() + ' now. ';
+    d += 'Genetics ' + (drift >= 0.03 ? '+' + drift.toFixed(2) + '/yr' : 'about flat');
+    return optCard('cull', mode, title, d, boardChoice.cull === mode);
+  };
+  el.innerHTML = card('light', 'Light') + card('normal', 'Normal') + card('hard', 'Hard');
+}
+// ---- Cow Market: fixed-price replacement-female offer board (A1 buy side) ----
+function renderCowMarket() {
+  const el = document.getElementById('cowMarket'); if (!el) return;
+  el.innerHTML = boardFemales.map(f => {
+    const q = boardChoice.cowBuy[f.key] || 0;
+    const dbeef = RanchEngine.dollarBeef(RanchEngine.femaleTierTraits(f.key));
+    return `<div class="cow-row">
+      <div class="cow-info">
+        <div class="cow-t">${esc(f.label)}</div>
+        <div class="cow-d">$${f.price.toLocaleString()}/hd &middot; ${f.lot} hd/lot &middot; ${g('dollarBeef', '$Beef')} ~${dbeef}</div>
+      </div>
+      <div class="stepper">
+        <button type="button" onclick="setCowBuy('${f.key}',-1)" ${q <= 0 ? 'disabled' : ''}>&minus;</button>
+        <span class="qty">${q}</span>
+        <button type="button" onclick="setCowBuy('${f.key}',1)">+</button>
+      </div>
+    </div>`;
+  }).join('') + `<div class="cow-d" id="cowBuySummary" style="margin-top:0.35rem"></div>`;
+  updateCowBuySummary();
+}
+function updateCowBuySummary() {
+  const el = document.getElementById('cowBuySummary'); if (!el) return;
+  let head = 0, cost = 0;
+  boardFemales.forEach(f => { const q = boardChoice.cowBuy[f.key] || 0; head += q * f.lot; cost += q * f.lot * f.price; });
+  el.innerHTML = head
+    ? `Queued <b style="color:var(--tan)">${head.toLocaleString()}</b> head for <b style="color:var(--tan)">$${cost.toLocaleString()}</b> (capped at lock-in by cash, land, and a ~35%/yr integration limit).`
+    : '';
+}
+function setCowBuy(tier, delta) {
+  boardChoice.cowBuy[tier] = Math.max(0, (boardChoice.cowBuy[tier] || 0) + delta);
+  renderCowMarket(); updateConsequence();
+}
 function lockedNote(text) {
   return `<div style="border:1px dashed var(--border);border-radius:5px;padding:0.55rem 0.8rem;` +
     `color:var(--muted);font-size:0.8rem;background:var(--bg)">` +
@@ -896,7 +996,7 @@ function setChoice(group, mode) {
     renderSemenOffers();
   }
   else if (group === 'debt' && mode === 'nolev') { /* not selectable */ }
-  else { boardChoice[group] = mode; if (group === 'herd') renderHerdOptions(); else renderDebtOptions(); }
+  else { boardChoice[group] = mode; if (group === 'herd') renderHerdOptions(); else if (group === 'cull') renderCullOptions(); else renderDebtOptions(); }
   updateConsequence();
 }
 
@@ -907,7 +1007,8 @@ function updateConsequence() {
   el.innerHTML =
     `<div>After these operations: <b>${r.herd.toLocaleString()}</b> head, ` +
     `<b>$${Math.round(r.cash).toLocaleString()}</b> cash, ` +
-    `<b>$${Math.round(r.debt).toLocaleString()}</b> debt. ` +
+    `<b>$${Math.round(r.debt).toLocaleString()}</b> debt, ` +
+    `${g('dollarBeef', '$Beef')} <b>${RanchEngine.dollarBeef(r.g)}</b>. ` +
     `Your bids below draw on this cash.</div>` +
     `<div class="fit-note">${fitNote(r)}</div>`;
   // the sale exposure and every bid line follow post-operations cash
@@ -943,7 +1044,7 @@ async function submitPlay() {
     const w = boardWorld;
     const n = choiceNumbers();
     applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
-    applySemenSell(r); applyTallow(r);
+    applyCowBuy(r, w); applyCull(r); applySemenSell(r); applyTallow(r);
 
     const { error } = await supa.from('teams').update({ state: JSON.parse(JSON.stringify(r, setReplacer)) }).eq('id', TEAM_ID);
     if (error) { msg('Could not save operations: ' + error.message, 'err'); return; }
@@ -971,7 +1072,8 @@ async function submitPlay() {
 
     await supa.from('decisions').insert(
       { game_id: GAME_ID, team_id: TEAM_ID, year: CUR_YEAR, kind: 'board_submitted',
-        payload: { herd: boardChoice.herd, debt: boardChoice.debt, techs: boardChoice.techs,
+        payload: { herd: boardChoice.herd, cull: boardChoice.cull, cowBuy: boardChoice.cowBuy,
+                   debt: boardChoice.debt, techs: boardChoice.techs,
                    semenSell: boardChoice.semenSell, bids: upserts.length, expandCows: n.expandCows, debtAction: n.debtAction } });
 
     const warn = overCash ? ' Note: a bid tops your cash, so winning it would force a fire sale.' : '';
@@ -1268,8 +1370,83 @@ async function showResults(world) {
   html += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem">Waiting for the instructor to advance to the next year.</div>`;
 
   document.getElementById('cardWon').innerHTML = html;
+  // end-of-game debriefs (C1 winner's curse, D1 robustness). Appended after the main
+  // render so the yearly resolve path stays synchronous and fast.
+  if (PHASE === 'ended') {
+    const extra = (await winnersCurseDebrief(nameById)) + robustnessReplay(st, world);
+    document.getElementById('cardWon').insertAdjacentHTML('beforeend', extra);
+  }
   // visibility is owned by showOnly() in handlePhaseChange; do not force it here or a
   // slow paint could re-show this section on a newer phase's screen
+}
+
+// ---- C1: winner's-curse debrief (reads every sold lot's revealed TRUE traits) ----
+// The curse: the winning bidder is the one who most overestimated a common value they
+// could not fully read. Catalog $Beef is the estimate every bidder saw; True $Beef is
+// what the bull actually was. A negative surprise on a lot you paid up for is the curse.
+async function winnersCurseDebrief(nameById) {
+  const { data: bulls } = await supa.from('bulls').select('*')
+    .eq('game_id', GAME_ID).not('winner_team', 'is', null).order('year');
+  if (!bulls || !bulls.length) return '';
+  let rows = '', mySurprise = 0, myN = 0, mySpend = 0;
+  bulls.forEach(b => {
+    const catB = RanchEngine.dollarBeef(b.catalog);
+    const trueB = RanchEngine.dollarBeef(b.truth);
+    const surprise = trueB - catB;                 // + = better than advertised, - = the curse
+    const mine = b.winner_team === TEAM_ID;
+    if (mine) { mySurprise += surprise; myN++; mySpend += Number(b.price || 0); }
+    const col = surprise >= 6 ? '#acc87a' : surprise <= -6 ? '#d99079' : 'var(--dim)';
+    rows += `<tr${mine ? ' style="background:#2f2513"' : ''}>` +
+      `<td style="font-family:var(--mono)">Y${b.year}</td>` +
+      `<td>${esc(b.name || b.sire)}</td>` +
+      `<td><span class="tag tag-${b.tier}">${b.tier}</span></td>` +
+      `<td>${mine ? '<strong style="color:var(--accent)">You</strong>' : esc(nameById[b.winner_team] || 'a ranch')}</td>` +
+      `<td style="font-family:var(--mono)">${catB}</td>` +
+      `<td style="font-family:var(--mono)">${trueB}</td>` +
+      `<td style="font-family:var(--mono);color:${col}">${surprise >= 0 ? '+' : ''}${surprise}</td>` +
+      `<td style="font-family:var(--mono)">$${Math.round(Number(b.price || 0)).toLocaleString()}</td></tr>`;
+  });
+  const avg = myN ? (mySurprise / myN) : 0;
+  const verdict = !myN ? 'You bought no bulls at auction, so the curse never had a chance to bite.'
+    : avg <= -4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won ($${Math.round(mySpend).toLocaleString()}), the true genetics averaged <b style="color:#d99079">${avg.toFixed(0)} $Beef below</b> the catalog. That is the winner\'s curse: you tended to win the lots you most overvalued.`
+    : avg >= 4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won, the true genetics averaged <b style="color:#acc87a">+${avg.toFixed(0)} $Beef above</b> catalog. You read the sale well and were not cursed.`
+    : `On the ${myN} bull${myN > 1 ? 's' : ''} you won, true genetics landed within ${Math.abs(avg).toFixed(0)} $Beef of the catalog on average. You paid close to fair value.`;
+  return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
+    `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">Winner's-Curse Debrief</div>` +
+    `<div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.6rem">${verdict}</div>` +
+    `<div style="overflow-x:auto"><table style="width:100%;font-size:0.8rem"><thead><tr>` +
+    `<th>Yr</th><th>Bull</th><th>Tier</th><th>Winner</th><th>${g('dollarBeef', 'Cat $B')}</th><th>True $B</th><th>Surprise</th><th>Price</th>` +
+    `</tr></thead><tbody>${rows}</tbody></table></div></div>`;
+}
+
+// ---- D1: robustness replay-roulette (engine as a black box; no rule change) ----
+// Replays your FINAL operation against three drought draws, holding your herd, genetics,
+// and decisions fixed. Same plan, different weather: the spread shows whether your ranch
+// is robust or fragile. This runs productionYear on a throwaway copy, so nothing changes.
+function robustnessReplay(st, world) {
+  if (!st || !st.g) return '';
+  const scenarios = [
+    { label: 'Open year (no drought)', drought: 'mild' },
+    { label: 'Moderate drought',       drought: 'moderate' },
+    { label: 'Severe drought',         drought: 'severe' },
+  ];
+  const base = JSON.parse(JSON.stringify(st, setReplacer));
+  const rows = scenarios.map(sc => {
+    const r = reviveState(JSON.parse(JSON.stringify(base)));
+    const w = Object.assign({}, world || RanchEngine.newWorld(), { drought: sc.drought });
+    RanchEngine.productionYear(r, w);
+    const net = r.lastStmt ? r.lastStmt.net : (r.cash - st.cash);
+    const eq = RanchEngine.equity(r, w);
+    const col = net >= 0 ? 'var(--sand)' : '#d99079';
+    return `<tr><td>${sc.label}</td>` +
+      `<td style="font-family:var(--mono);color:${col}">${money(net)}</td>` +
+      `<td style="font-family:var(--mono)">${r.herd.toLocaleString()} hd</td>` +
+      `<td style="font-family:var(--mono)">$${(eq / 1e6).toFixed(2)}M</td></tr>`;
+  }).join('');
+  return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
+    `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">Robustness Check: Same Ranch, Three Weathers</div>` +
+    `<div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.6rem">Your ranch as it stands, run one more year against three drought draws. A tight spread means a robust operation; a wide one means you were optimized for the weather you happened to get.</div>` +
+    `<table style="width:100%;font-size:0.82rem"><thead><tr><th>Scenario</th><th>Year net</th><th>Herd</th><th>Equity</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
 // ---- Your Books: the income statement (does the money flow make sense?) and the

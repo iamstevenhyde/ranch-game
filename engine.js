@@ -254,6 +254,83 @@ function tallowRevenue(r, w) {
   return { gross, net: gross - TALLOW.contractFee, culls };
 }
 
+// ---------- selective culling (A1, Steven's dad) ----------
+// Culling the bottom of the herd's genetic distribution and retaining heifers off the
+// best drifts the cow base UP over the years. Intensity is a player lever with a real
+// tradeoff: a HARD cull sells more mature cows now (cash in) and shrinks the herd,
+// trading this season's calf crop for faster genetic progress; a LIGHT cull holds the
+// herd but barely selects. Selection alone has diminishing returns and plateaus at
+// CULL_CEIL (you cannot select beyond your own best cows), so to push genetics past
+// that you must bring in new blood through auction bulls or bought elite females. That
+// bounded ceiling is also the brake on the multi-year genetics snowball.
+const CULL = {
+  light:  { rate: 0.02,  gain: 0.006, herd:  0.006 },  // retain broadly, herd creeps up, little selection
+  normal: { rate: 0.035, gain: 0.010, herd:  0.000 },  // standard cull-and-replace, near genetics-neutral
+  hard:   { rate: 0.085, gain: 0.055, herd: -0.045 },  // cull deep: cash in, herd dips, genetics climb
+};
+const CULL_CEIL = 7.2;           // selection-only plateau; bulls / elite females push past it
+const CULL_COW_PRICE = 1150;     // mature cull cow $/head at feederIdx 1 (below a bred replacement)
+// AI cull intensity by secret objective. The AI plays a straight cull-and-replace: HARD
+// culling is a lever humans discover, and because the balance gate only tests AI-vs-AI, a
+// gate-neutral AI stance keeps the baseline balance intact while the human lever stays as
+// strong as it needs to feel. Passive is exempt in productionYear (keeps its own do-nothing cull).
+const CULL_POLICY = {
+  elite_genetics: 'normal', seedstock: 'normal',
+  rapid_expansion: 'normal', naive_roi: 'normal', cost_leader: 'normal',
+  conservative: 'normal', family_survival: 'normal', passive: 'light',
+};
+function cullMode(r) { return CULL[r.cullMode] ? r.cullMode : 'normal'; }
+
+// ---------- replacement-female market (A1 buy side; fixed-price offer board) ----------
+// No female lot data exists (the Red Bluff catalog is bulls), so the board is a synthetic
+// three-tier offering posted at a fixed price each year, scaled by the feeder index.
+// Buying a lot adds head AND blends that tier's genetics into the herd average, weighted
+// by the share of the herd the purchase represents. Commercial females sit near a mediocre
+// herd's baseline (headcount, not genetics); registered and elite females carry real merit.
+// A lot is only a handful of head against a herd of hundreds, so the female board moves
+// genetics slowly: the lesson is that females are an expensive route to genetic gain next
+// to a bull that covers 150 cows, which is exactly why culling and bulls carry the program.
+const FEMALE_TIERS = [
+  { key: 'commercial', label: 'Commercial bred heifers', base: 4.6, price: 2100,  lot: 20 },
+  { key: 'registered', label: 'Registered bred heifers', base: 6.4, price: 4800,  lot: 10 },
+  { key: 'elite',      label: 'Elite donor females',     base: 8.2, price: 14000, lot: 3  },
+];
+function femaleTierTraits(tierKey) {
+  const tier = FEMALE_TIERS.find(t => t.key === tierKey);
+  const base = tier ? tier.base : 4.6;
+  // registered / elite females are selected for maternal + carcass; commercial are flat-average
+  const shape = tierKey === 'commercial'
+    ? { ce: 0, growth: 0, marb: 0, forage: 0, milk: 0 }
+    : { ce: 0.4, growth: 0.2, marb: 0.5, forage: -0.2, milk: 0.6 };
+  const g = {};
+  TRAITS.forEach(t => g[t] = clamp(base + (shape[t] || 0), 1, 10));
+  return g;
+}
+function femalePrice(tier, w) { return Math.round(tier.price * Math.pow(w.feederIdx, FEEDER_ELASTICITY)); }
+function makeFemaleBoard(w) {
+  // one lot per tier posted each year; price rides the feeder index like every other input
+  return FEMALE_TIERS.map(t => ({
+    key: t.key, label: t.label, lot: t.lot, price: femalePrice(t, w), gAvg: t.base,
+  }));
+}
+// buy up to nLots of a tier, honoring the land ceiling, cash, and the ~35%/yr integration
+// cap. Returns the head actually bought (0 if none); genetics blend in by head share.
+function buyFemales(r, w, tierKey, nLots) {
+  const tier = FEMALE_TIERS.find(t => t.key === tierKey);
+  if (!tier || !(nLots > 0)) return 0;
+  const price = femalePrice(tier, w);
+  const want = tier.lot * nLots;
+  const roomLand = Math.max(0, r.landCap - r.herd);
+  const roomAbsorb = Math.round(r.herd * 0.35);        // a crew integrates ~35% more cows a year
+  const roomCash = Math.floor(r.cash / price);
+  const head = Math.max(0, Math.min(want, roomLand, roomAbsorb, roomCash));
+  if (head <= 0) return 0;
+  const gT = femaleTierTraits(tierKey);
+  TRAITS.forEach(t => r.g[t] = (r.g[t] * r.herd + gT[t] * head) / (r.herd + head));
+  r.herd += head; r.cash -= head * price;
+  return head;
+}
+
 // drought Markov chain (2013-2025 western DSI)
 const DROUGHT_T = {
   mild:     { severe: 0.15, moderate: 0.35 },
@@ -557,6 +634,18 @@ function laborCost(r, w) {
 }
 function productionYear(r, w) {
   const sev = droughtSeverity(w, r.region);
+  // selective culling (A1): apply this year's cull intensity before the calf crop is
+  // counted. Harder culls shrink the cow herd (fewer calves now) but sell mature cows for
+  // cash; the genetic lift lands in the genetics-evolution block below. Passive keeps its
+  // own do-nothing cull (herd * 0.88 further down), so it is exempt here.
+  let cullCash = 0;
+  if (r.key !== 'passive') {
+    const cm = CULL[cullMode(r)];
+    const headDelta = Math.round(r.herd * cm.herd);
+    if (headDelta !== 0) r.herd = Math.max(80, r.herd + headDelta);
+    const extraCull = Math.max(0, cm.rate - CULL.normal.rate); // cull above the baked-in replacement rate
+    cullCash = r.herd * extraCull * CULL_COW_PRICE * Math.pow(w.feederIdx, FEEDER_ELASTICITY);
+  }
   let rate = 0.88 + (r.g.ce - 5) * 0.004 - sev * 0.06;
   if (sev > 0.7 && r.tech.has('drone') && REGIONS[r.region].tech.drone >= 1.2) rate += sev * 0.018;
   const calves = r.herd * clamp(rate, 0.6, 0.97);
@@ -619,17 +708,25 @@ function productionYear(r, w) {
   // fixed overhead (equipment, insurance, facilities) is lumpy: small outfits pay it too
   const costs = (cowCostTot + laborTot) * lean + overhead + extraCost + commodityBullCost + interest;
   r.totalCost += costs; r.totalLbs += calves * lbs;
-  const net = revenue + semenRoyalty + tal.net - costs;
+  const net = revenue + semenRoyalty + tal.net + cullCash - costs;
   r.cash += net;
   r.revHist.push(net);
   // income statement snapshot for the balance-sheet card (display only; the math above
   // is the source of truth). Rounded at render time, not here.
-  r.lastStmt = { year: w.year, revenue, semenRoyalty, semenStraws, tallowNet: tal.net, tallowCulls: Math.round(tal.culls), cowCost: cowCostTot * lean, labor: laborTot * lean,
+  r.lastStmt = { year: w.year, revenue, semenRoyalty, semenStraws, tallowNet: tal.net, tallowCulls: Math.round(tal.culls), cullCash: Math.round(cullCash), cowCost: cowCostTot * lean, labor: laborTot * lean,
                  overhead, bullCost: commodityBullCost, breeding: extraCost, interest, net,
                  calves: Math.round(calves), lbs: Math.round(lbs) };
   // genetics evolve toward active bulls' true traits, plus any AI semen program bought
   // this season. Semen contributes weighted by its CONCEPTION rate (the AI gamble): a
   // program that only settles 45% of cows moves the herd far less than one that hits 70%.
+  // selective-culling genetic lift: bounded, with diminishing returns (you cannot select
+  // beyond your own best cows). Applies whether or not you own bulls; it is what turns the
+  // cull intensity into a real long-horizon genetics lever, and it offsets the unimproved
+  // slide below so a hard-culling herd climbs even with no bull in the pasture.
+  if (r.key !== 'passive') {
+    const cg = CULL[cullMode(r)].gain;
+    TRAITS.forEach(t => { if (r.g[t] < CULL_CEIL) r.g[t] += (CULL_CEIL - r.g[t]) * cg; });
+  }
   const active = r.bulls.filter(b => w.year - b.boughtYear < 4);
   const cov = bullCoverage(r);
   const speed = r.tech.has('genomic') ? 0.30 : 0.22; // genomic selection accelerates progress
@@ -664,6 +761,9 @@ function productionYear(r, w) {
 // ---------- decisions ----------
 function decideYear(r, w) {
   const a = r.a;
+  // cull intensity by objective: genetics / reputation archetypes select hard, headcount
+  // chasers keep everyone, the rest run a standard cull-and-replace (humans pick their own)
+  r.cullMode = CULL_POLICY[r.key] || 'normal';
   // distress: borrow first if the archetype tolerates debt, then fire-sale cows
   if (r.cash < 0 && a.debtCap > 0) {
     const room = a.debtCap * Math.max(0, equity(r, w)) - r.debt;
@@ -705,6 +805,10 @@ function decideYear(r, w) {
     const buy = Math.min(Math.floor(budget / cowPrice), r.landCap - r.herd, Math.round(r.herd * 0.35));
     if (buy > 0) { r.herd += buy; r.cash -= buy * cowPrice; }
   }
+  // replacement-female buys (A1 buy side) are a HUMAN lever: the fixed-price offer board
+  // lets a player raise the herd ceiling past what culling alone reaches. The scripted AI
+  // sticks to bulls and semen, so this stays gate-neutral (buyFemales is regression-tested
+  // through the human board path in test-flow.js, not exercised here).
   // debt paydown for low-debt types
   if (r.debt > 0 && (r.key === 'conservative' || r.key === 'family_survival')) {
     const pay = Math.min(r.debt, Math.max(0, r.cash - 80000));
@@ -911,6 +1015,12 @@ if (typeof window !== 'undefined') {
     bestSemenPrice,
     TALLOW,
     tallowRevenue,
+    CULL,
+    CULL_CEIL,
+    FEMALE_TIERS,
+    makeFemaleBoard,
+    buyFemales,
+    femaleTierTraits,
     DROUGHT_T,
     SHOCKS,
     TRAITS,
@@ -966,6 +1076,12 @@ if (typeof window !== 'undefined') {
     bestSemenPrice,
     TALLOW,
     tallowRevenue,
+    CULL,
+    CULL_CEIL,
+    FEMALE_TIERS,
+    makeFemaleBoard,
+    buyFemales,
+    femaleTierTraits,
     DROUGHT_T,
     SHOCKS,
     TRAITS,
