@@ -212,8 +212,10 @@ function buySemen(r, w, item) {
 // pay up, so price high), a marginal premium bull is elastic (price low or the market
 // walks). The revenue-maximizing price therefore depends on WHAT you own, the pricing
 // lesson the seedstock strategy is built to teach.
+// programFee is the first-year setup for a given bull (collection, listing, marketing);
+// renewalFee is the cheaper ongoing cost once he is a listed, continuous program (7/08)
 const SEMEN_SELL = { baseStraws: 260, elasticBase: 1.15, elasticQuality: 0.62,
-                     programFee: 2000, minPrice: 5, maxPrice: 100 };
+                     programFee: 2000, renewalFee: 500, minPrice: 5, maxPrice: 100 };
 function canSellSemen(bull) { return bull && (bull.tier === 'elite' || bull.tier === 'premium'); }
 // straws sold + gross at a given price, given the bull and the owner's brand
 function semenDemand(r, w, bull, price) {
@@ -244,14 +246,20 @@ function bestSemenPrice(r, w, bull) {
 // volume RISES in drought (you destock, more cows go to rendering) exactly when calf
 // revenue falls, and the tallow price runs on its own cycle, so the income smooths the
 // cattle cycle instead of amplifying it. Modest magnitude: a hedge, not a main engine.
-const TALLOW = { contractFee: 6000, valuePerCull: 62, baseCull: 0.11, droughtCull: 0.10 };
+// contractFee is the FIRST-year setup (paperwork, hauling setup, the rendering relationship);
+// a contract held continuously renews cheap after that (Steven 7/08: recurring service fees
+// should amortize, not re-charge full freight every year). A lapse resets to the setup fee.
+const TALLOW = { contractFee: 6000, renewalFee: 1500, valuePerCull: 62, baseCull: 0.11, droughtCull: 0.10 };
 function tallowRevenue(r, w) {
-  if (!r.tallowContract) return { gross: 0, net: 0, culls: 0 };
+  if (!r.tallowContract) return { gross: 0, net: 0, culls: 0, fee: 0 };
   const sev = droughtSeverity(w, r.region);
   const cullRate = TALLOW.baseCull + sev * TALLOW.droughtCull; // drought sends more cows to rendering
   const culls = r.herd * cullRate;
   const gross = culls * TALLOW.valuePerCull * w.tallowIdx;
-  return { gross, net: gross - TALLOW.contractFee, culls };
+  // renewal if the contract was active the prior year (continuous); productionYear stamps
+  // r.tallowLastYear after this runs, so this stays read-only and the UI preview is honest
+  const fee = (r.tallowLastYear === w.year - 1) ? TALLOW.renewalFee : TALLOW.contractFee;
+  return { gross, net: gross - fee, culls, fee };
 }
 
 // ---------- selective culling (A1, Steven's dad) ----------
@@ -695,14 +703,18 @@ function productionYear(r, w) {
   for (const b of r.bulls) {
     if (w.year - b.boughtYear >= 4 || !b.semenPrice || !canSellSemen(b)) continue;
     const d = semenDemand(r, w, b, b.semenPrice);
-    semenRoyalty += d.gross - SEMEN_SELL.programFee;
+    // full setup the first season this bull is listed, cheap renewal if listed continuously
+    const fee = (b.semenLastYear === w.year - 1) ? SEMEN_SELL.renewalFee : SEMEN_SELL.programFee;
+    semenRoyalty += d.gross - fee;
     semenStraws += Math.round(d.straws);
-    b.lastStraws = Math.round(d.straws); b.lastSemenRev = Math.round(d.gross - SEMEN_SELL.programFee);
+    b.lastStraws = Math.round(d.straws); b.lastSemenRev = Math.round(d.gross - fee);
+    b.semenLastYear = w.year;
   }
   r.semenRoyalty = semenRoyalty; r.semenStraws = semenStraws;
   // tallow: byproduct income off cull cows, net of the rendering contract fee
   const tal = tallowRevenue(r, w);
   r.tallowNet = tal.net; r.tallowCulls = Math.round(tal.culls);
+  if (r.tallowContract) r.tallowLastYear = w.year; // stamp continuity for next year's renewal check
   const cowCostTot = cowCost(r, w) * r.herd, laborTot = laborCost(r, w);
   const overhead = 35000, interest = r.debt * (w.rateHikeYears > 0 ? 0.13 : 0.07);
   // fixed overhead (equipment, insurance, facilities) is lumpy: small outfits pay it too

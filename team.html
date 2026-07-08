@@ -690,18 +690,23 @@ async function refreshBoard(world) {
   const herd0 = st.herd0 || st.herd, cap = st.landCap || herd0 * 1.5;
   const stake = RanchEngine.START_CASH || 6500000;
   const bars = [
-    { key: 'genetics', name: '$Beef', pct: RanchEngine.clamp((db - 50) / 150, 0.02, 1),
+    { key: 'genetics', name: '$Beef', color: 'var(--tan)', pct: RanchEngine.clamp((db - 50) / 150, 0.02, 1),
       val: db + ' index', tip: 'dollarBeef' },
-    { key: 'herdGrowth', name: 'Herd', pct: RanchEngine.clamp(st.herd / cap, 0.02, 1),
+    { key: 'herdGrowth', name: 'Herd', color: 'var(--sage)', pct: RanchEngine.clamp(st.herd / cap, 0.02, 1),
       val: st.herd.toLocaleString() + ' / ' + cap.toLocaleString() + ' cap' },
-    { key: 'cash', name: 'Cash', pct: RanchEngine.clamp(st.cash / stake, 0.02, 1),
+    { key: 'cash', name: 'Cash', color: 'var(--sky)', pct: RanchEngine.clamp(st.cash / stake, 0.02, 1),
       val: '$' + (st.cash / 1e6).toFixed(2) + 'M' },
   ];
-  document.getElementById('boardKpis').innerHTML = bars.map(b =>
-    `<div class="kpi-row"><span class="kpi-name">${b.tip ? g(b.tip, b.name) : b.name}</span>` +
-    `<span class="kpi-track"><span class="kpi-fill ${arch.kpi[b.key] ? 'pri' : ''}" style="width:${Math.round(b.pct * 100)}%"></span></span>` +
-    `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`
-  ).join('');
+  // one hue per metric ($Beef gold, Herd olive, Cash denim); the metrics your objective is
+  // scored on carry a star and a full-strength bar, the rest are dimmed so the eye reads
+  // "these are the ones that count for me" at a glance
+  document.getElementById('boardKpis').innerHTML = bars.map(b => {
+    const pri = !!arch.kpi[b.key];
+    return `<div class="kpi-row"><span class="kpi-name">${b.tip ? g(b.tip, b.name) : b.name}` +
+      `${pri ? ` <span title="scored in your objective" style="color:${b.color}">★</span>` : ''}</span>` +
+      `<span class="kpi-track"><span class="kpi-fill" style="width:${Math.round(b.pct * 100)}%;background:${b.color};opacity:${pri ? 1 : 0.5}"></span></span>` +
+      `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`;
+  }).join('');
 
   renderHerdOptions(); renderCullOptions(); renderCowMarket(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
@@ -721,7 +726,7 @@ function renderTallowChoice() {
     `<label class="opt${on ? ' on' : ''}" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;min-width:100%">` +
     `<input type="checkbox" ${on ? 'checked' : ''} onchange="setTallow(this.checked)" style="width:auto;margin:0">` +
     `<span><span class="opt-t">Run a rendering / tallow program</span>` +
-    `<span class="opt-d">~${Math.round(preview.culls)} cull cows, net <b style="color:${preview.net >= 0 ? 'var(--sand)' : '#d99079'}">${money(preview.net)}</b> this year after the $${RanchEngine.TALLOW.contractFee.toLocaleString()} contract fee.${droughtNote}</span></span></label>`;
+    `<span class="opt-d">~${Math.round(preview.culls)} cull cows, net <b style="color:${preview.net >= 0 ? 'var(--sand)' : '#d99079'}">${money(preview.net)}</b> this year after the $${Math.round(preview.fee).toLocaleString()} ${preview.fee < RanchEngine.TALLOW.contractFee ? 'renewal' : 'setup'} fee.${droughtNote}</span></span></label>`;
 }
 function setTallow(on) { boardChoice.tallow = !!on; renderTallowChoice(); updateConsequence(); }
 
@@ -739,7 +744,8 @@ function renderSemenSell() {
     const open = cur != null && cur > 0;
     const price = open ? cur : best;
     const demo = RanchEngine.semenDemand(st, boardWorld, b, price);
-    const net = Math.round(demo.gross - RanchEngine.SEMEN_SELL.programFee);
+    const fee = semenFeeFor(b);
+    const net = Math.round(demo.gross - fee);
     return `<div style="border:1px solid var(--border);border-radius:5px;padding:0.55rem 0.7rem;margin-bottom:0.4rem;background:var(--surface2)">
       <div style="display:flex;align-items:baseline;gap:0.5rem;font-size:0.84rem;flex-wrap:wrap">
         <strong>${esc(b.name || b.sire || 'Your bull')}</strong>
@@ -753,13 +759,19 @@ function renderSemenSell() {
           <input type="number" min="5" max="100" value="${price}" style="width:78px;margin:0" oninput="setSemenPrice(${i},this.value)">
           <span style="color:var(--muted)">suggested $${best}</span>
         </div>
-        <div id="selldemo_${i}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem">${semenSellDemoText(demo, net)}</div>
+        <div id="selldemo_${i}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem">${semenSellDemoText(demo, net, fee)}</div>
       </div>
     </div>`;
   }).join('');
 }
-function semenSellDemoText(demo, net) {
-  return `~${Math.round(demo.straws)} straws, net <b style="color:${net >= 0 ? 'var(--sand)' : '#d99079'}">${money(net)}</b> after the $${RanchEngine.SEMEN_SELL.programFee.toLocaleString()} program fee`;
+function semenSellDemoText(demo, net, fee) {
+  const f = fee == null ? RanchEngine.SEMEN_SELL.programFee : fee;
+  const word = f < RanchEngine.SEMEN_SELL.programFee ? 'renewal' : 'program';
+  return `~${Math.round(demo.straws)} straws, net <b style="color:${net >= 0 ? 'var(--sand)' : '#d99079'}">${money(net)}</b> after the $${f.toLocaleString()} ${word} fee`;
+}
+// this bull's semen fee: full setup the first season listed, cheap renewal if listed last year too
+function semenFeeFor(b) {
+  return (b && b.semenLastYear === CUR_YEAR - 1) ? RanchEngine.SEMEN_SELL.renewalFee : RanchEngine.SEMEN_SELL.programFee;
 }
 function toggleSemenSell(i, on) {
   if (on) boardChoice.semenSell[i] = RanchEngine.bestSemenPrice(boardBaseSt, boardWorld, boardBaseSt.bulls[i]);
@@ -771,8 +783,9 @@ function setSemenPrice(i, v) {
   boardChoice.semenSell[i] = p;
   const b = boardBaseSt.bulls[i];
   const demo = RanchEngine.semenDemand(boardBaseSt, boardWorld, b, p);
+  const fee = semenFeeFor(b);
   const el = document.getElementById('selldemo_' + i);
-  if (el) el.innerHTML = semenSellDemoText(demo, Math.round(demo.gross - RanchEngine.SEMEN_SELL.programFee));
+  if (el) el.innerHTML = semenSellDemoText(demo, Math.round(demo.gross - fee), fee);
   updateConsequence();
 }
 
