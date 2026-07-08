@@ -70,7 +70,13 @@ const COUNTIES = [
 ];
 
 // ---------- ranch market (Steven 7/06: equal cash, priced listings, must buy round 0) ----------
-const START_CASH = 4200000;   // every team's identical investor stake
+// Pricing raised 7/08 (Steven: "ranch prices seem cheap"). A turnkey Western operation
+// is land-dominated: ~$2,500/head of carrying capacity plus $800k of headquarters and
+// improvements, times the regional land level. That puts the big outfits at $6-8M and
+// the small places near $1.5-2M, so buying the ranch commits a real chunk of the stake
+// instead of leaving idle cash. Stake raised to $6.5M so the spread stays affordable;
+// gate re-passes on 4 runs (rapid_expansion holds 7-9%, the tightest archetype).
+const START_CASH = 6500000;   // every team's identical investor stake
 const LAND_MULT = { basin: 0.85, foothill: 1.05, plains: 0.95, corn: 1.15 };  // land price level by region
 const LANDCAP_R = { basin: 2.0, foothill: 1.7, plains: 1.6, corn: 1.35 };     // expansion headroom (federal range vs fenced row-crop)
 
@@ -78,10 +84,11 @@ function makeListings() {
   return COUNTIES.map(c => {
     const herd = Math.round(c.op * (0.85 + Math.random() * 0.3));
     const landCap = Math.round(herd * LANDCAP_R[c.region] * (0.9 + Math.random() * 0.2));
-    // price reflects scale: per-head base + fixed headquarters/improvements, times land level.
-    // Clamped so every listing is buyable but the biggest leaves only a sliver of working capital.
+    // price reflects scale: per-head land base + fixed headquarters/improvements, times
+    // land level. Clamped so every listing is buyable but the biggest leaves only a
+    // sliver of working capital (the trophy-ranch winner's curse in the land market).
     const ask = Math.min(Math.round(START_CASH * 0.97),
-      Math.round((herd * 1200 + 250000) * LAND_MULT[c.region] * (1 + gauss() * 0.06)));
+      Math.round((herd * 2500 + 800000) * LAND_MULT[c.region] * (1 + gauss() * 0.06)));
     return { county: c.name, region: c.region, herd, landCap, ask };
   });
 }
@@ -143,6 +150,57 @@ const SIRES = [
   { name: 'Connealy Black Granite',  arc: { ce: 9, growth: 6, marb: 6, forage: 7, milk: 8 } },
   { name: 'SAV Renown 3439',         arc: { ce: 6, growth: 7, marb: 9, forage: 5, milk: 6 } },
 ];
+
+// $Beef index: the terminal-index vocabulary students see in real catalogs. Display
+// mapping only (the economy runs on traits): calibrated so the REAL Red Bluff $B
+// distribution (p5 101, median 147, p95 195) lands where real sale bulls land, and a
+// commodity cow herd (traits ~5) prints around 72, far below sale-bull genetics.
+function dollarBeef(traits) {
+  return Math.round(147 + ((traits.growth * 0.5 + traits.marb * 0.5) - 7.5) * 30);
+}
+
+// AI-sire semen programs (7/08, Steven's ask): proven elite genetics without the
+// auction, cheap per straw, but AI does NOT always settle. Two real elite/premium
+// sires offered per year at a FIXED price; semen is non-rival, so any number of teams
+// can buy the same program. The trade is genetics-per-dollar vs RELIABILITY: a bought
+// bull settles ~90% of his cows every year; an AI program conceives at ~55-65% and
+// that rate is realized fresh each season, so the share of the calf crop it improves
+// is a gamble. Proven sires carry low truth noise (you know the genetics), the risk is
+// how MANY calves you get. A program lasts one breeding season, earns no reputation
+// splash, and builds no brand: the make-vs-buy lesson. Genomic testing lifts the
+// conception rate (synchronized-AI protocols) and doubles the reach.
+const SEMEN = { offered: 2, coverage: 0.10, truthNoise: 0.12,
+                conceptionMean: 0.60, conceptionSd: 0.10, genomicConceptionBonus: 0.12 };
+function makeSemenCatalog(w) {
+  const out = [];
+  if (!(RB_BULLS && RB_BULLS.length)) return out;
+  const pool = RB_BULLS.filter(b => b.tier === 'elite' || b.tier === 'premium');
+  const used = new Set();
+  for (let i = 0; i < SEMEN.offered && pool.length; i++) {
+    let rb = pick(pool), tries = 0;
+    while (used.has(rb.name) && tries++ < 20) rb = pick(pool);
+    used.add(rb.name);
+    // per-straw pricing: a fraction of a herd-bull's cost, but you pay for the whole
+    // synchronized breeding group and only the settled share pays off
+    const price = Math.round((rb.tier === 'elite' ? 6200 : 4200) * Math.pow(w.feederIdx, FEEDER_ELASTICITY));
+    out.push({ name: rb.name, sire: rb.sire, tier: rb.tier, traits: rb.traits, epds: rb.epds, price });
+  }
+  return out;
+}
+function buySemen(r, w, item) {
+  if (!item || r.cash < item.price) return false;
+  if (r.semen && r.semen.boughtYear === w.year) return false; // one program per season
+  const truth = {};
+  TRAITS.forEach(t => truth[t] = clamp(item.traits[t] + gauss() * SEMEN.truthNoise, 1, 10));
+  // conception rate rolls FRESH this season: the AI gamble. Genomic-synchronized herds
+  // settle better. This scales how much of the herd the program actually improves.
+  const base = SEMEN.conceptionMean + (r.tech.has('genomic') ? SEMEN.genomicConceptionBonus : 0);
+  const conception = clamp(base + gauss() * SEMEN.conceptionSd, 0.30, 0.92);
+  r.semen = { name: item.name, tier: item.tier, traits: item.traits, truth,
+              boughtYear: w.year, paid: item.price, conception };
+  r.cash -= item.price;
+  return true;
+}
 
 // drought Markov chain (2013-2025 western DSI)
 const DROUGHT_T = {
@@ -278,6 +336,9 @@ function stepWorld(w) {
   w.feederHist.push(w.feederIdx);
   const wg = w.drought === 'severe' ? 0.08 + Math.random() * 0.03 : WAGE_DRIFT;
   w.wageRatchet *= (1 + wg);
+  // this season's AI-semen offerings (same two sires every team sees; opens with the
+  // tech shelf, UNLOCKS.tech). Regenerated each year so the sires rotate.
+  w.semenCatalog = w.year >= UNLOCKS.tech ? makeSemenCatalog(w) : [];
 }
 function droughtSeverity(w, region) {
   const base = w.drought === 'severe' ? 1.0 : w.drought === 'moderate' ? 0.5 : 0.0;
@@ -292,12 +353,12 @@ function makeRanch(key, l) {
     key, a, county: l.county, region: l.region, herd: l.herd, herd0: l.herd,
     cash: START_CASH - l.ask, ranchAsk: l.ask,
     debt: 0, g, rep: 25 + Math.round(Math.random() * 15),
-    tech: new Set(), bulls: [],
+    tech: new Set(), bulls: [], semen: null,
     landCap: l.landCap,
     // a ranch only needs so many herd sires; deep pockets no longer mean infinite bulls
     rosterCap: clamp(Math.round(l.herd / 250), 2, 8),
     peakEquity: 0, maxDrawdown: 0, totalCost: 0, totalLbs: 0, premSum: 0, premN: 0,
-    revHist: [],
+    revHist: [], semenRoyalty: 0, lastStmt: null,
   };
 }
 function equity(r, w) {
@@ -321,7 +382,7 @@ function makeRealBull(w) {
   });
   const anchor = tier.anchor * Math.pow(w.feederIdx, FEEDER_ELASTICITY);
   return { name: rb.name, sire: rb.sire, breed: rb.breed, consignor: rb.consignor,
-           epds: rb.epds, realYear: rb.saleYear,
+           epds: rb.epds, dollars: rb.dollars, realYear: rb.saleYear,
            tier: rb.tier, catalog, truth, anchor,
            reserve: anchor * 0.82, tierIdx: TIER.findIndex(x => x.key === rb.tier) };
 }
@@ -477,23 +538,39 @@ function productionYear(r, w) {
   const activeN = r.bulls.filter(b => w.year - b.boughtYear < 4).length;
   const commodityBullCost = Math.max(0, r.herd / 100 - activeN * 0.25) * 4000
                           * Math.pow(w.feederIdx, FEEDER_ELASTICITY);
+  // AI-stud royalties: an active ELITE bull's straws sell into the national program,
+  // and reputation prices them (proven brand moves semen). A make-side income line.
+  const eliteN = r.bulls.filter(b => b.tier === 'elite' && w.year - b.boughtYear < 4).length;
+  const semenRoyalty = eliteN * 1800 * clamp(r.rep / 60, 0.3, 1.3) * Math.pow(w.feederIdx, FEEDER_ELASTICITY);
+  r.semenRoyalty = semenRoyalty;
+  const cowCostTot = cowCost(r, w) * r.herd, laborTot = laborCost(r, w);
+  const overhead = 35000, interest = r.debt * (w.rateHikeYears > 0 ? 0.13 : 0.07);
   // fixed overhead (equipment, insurance, facilities) is lumpy: small outfits pay it too
-  const costs = (cowCost(r, w) * r.herd + laborCost(r, w)) * lean + 35000 + extraCost + commodityBullCost
-              + r.debt * (w.rateHikeYears > 0 ? 0.13 : 0.07);
+  const costs = (cowCostTot + laborTot) * lean + overhead + extraCost + commodityBullCost + interest;
   r.totalCost += costs; r.totalLbs += calves * lbs;
-  const net = revenue - costs;
+  const net = revenue + semenRoyalty - costs;
   r.cash += net;
   r.revHist.push(net);
-  // genetics evolve toward active bulls' true traits
+  // income statement snapshot for the balance-sheet card (display only; the math above
+  // is the source of truth). Rounded at render time, not here.
+  r.lastStmt = { year: w.year, revenue, semenRoyalty, cowCost: cowCostTot * lean, labor: laborTot * lean,
+                 overhead, bullCost: commodityBullCost, breeding: extraCost, interest, net,
+                 calves: Math.round(calves), lbs: Math.round(lbs) };
+  // genetics evolve toward active bulls' true traits, plus any AI semen program bought
+  // this season. Semen contributes weighted by its CONCEPTION rate (the AI gamble): a
+  // program that only settles 45% of cows moves the herd far less than one that hits 70%.
   const active = r.bulls.filter(b => w.year - b.boughtYear < 4);
-  if (active.length) {
-    const cov = bullCoverage(r);
-    const speed = r.tech.has('genomic') ? 0.30 : 0.22; // genomic selection accelerates progress
+  const cov = bullCoverage(r);
+  const speed = r.tech.has('genomic') ? 0.30 : 0.22; // genomic selection accelerates progress
+  const usableSemen = r.semen && r.semen.boughtYear === w.year ? r.semen : null;
+  if (active.length || usableSemen) {
     TRAITS.forEach(t => {
-      const bAvg = avg(active.map(b => b.truth[t]));
+      let pull = 0, wgt = 0;
+      if (active.length) { const bAvg = avg(active.map(b => b.truth[t])); const cw = clamp(cov * active.length, 0.1, 0.8); pull += (bAvg - r.g[t]) * cw; wgt += cw; }
+      if (usableSemen) { const sw = SEMEN.coverage * usableSemen.conception * (r.tech.has('genomic') ? 2 : 1); pull += (usableSemen.truth[t] - r.g[t]) * sw; wgt += sw; }
       // selection focus: breeders pull hardest on the traits their strategy values
       const focus = 0.5 + (r.a.traitVal[t] || 1) / 2;
-      r.g[t] += (bAvg - r.g[t]) * speed * focus * clamp(cov * active.length, 0.1, 0.8);
+      if (wgt > 0) r.g[t] += pull * speed * focus;
     });
   } else {
     TRAITS.forEach(t => r.g[t] += (4.3 - r.g[t]) * 0.08); // unimproved herds slide below average
@@ -565,6 +642,15 @@ function decideYear(r, w) {
   // tech adoption: one per year if policy triggers and cash allows.
   // The tech shelf is year-gated (UNLOCKS.tech): nobody adopts before it opens.
   if (w.year < UNLOCKS.tech) return;
+  // AI-semen: genetics-led archetypes buy proven straws when they are NOT winning bulls
+  // at auction (the make-vs-buy hedge). Cheaper per unit, but the conception gamble is
+  // priced into how much it moves the herd. Bull-focused buyers skip it.
+  if ((r.key === 'elite_genetics' || r.key === 'seedstock') && (w.semenCatalog || []).length
+      && !(r.semen && r.semen.boughtYear === w.year)) {
+    const best = w.semenCatalog.slice().sort((x, y) =>
+      (y.traits.marb + y.traits.growth) - (x.traits.marb + x.traits.growth))[0];
+    if (best && r.cash > best.price + 200000) buySemen(r, w, best);
+  }
   for (const t of Object.keys(TECHS)) {
     if (r.tech.has(t)) continue;
     const fit = REGIONS[r.region].tech[t];
@@ -731,6 +817,10 @@ if (typeof window !== 'undefined') {
     SIRES,
     TECHS,
     UNLOCKS,
+    SEMEN,
+    dollarBeef,
+    makeSemenCatalog,
+    buySemen,
     DROUGHT_T,
     SHOCKS,
     TRAITS,
@@ -776,6 +866,10 @@ if (typeof window !== 'undefined') {
     SIRES,
     TECHS,
     UNLOCKS,
+    SEMEN,
+    dollarBeef,
+    makeSemenCatalog,
+    buySemen,
     DROUGHT_T,
     SHOCKS,
     TRAITS,

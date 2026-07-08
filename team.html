@@ -94,6 +94,18 @@
   .consequence b { color: var(--tan); font-family: var(--mono); }
   .fit-note { font-size: 0.78rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--border); color: var(--dim); }
   .techpill.on { background: var(--accent) !important; color: #1a1510 !important; border-color: var(--accent) !important; }
+  /* glossary: dotted term that reveals a definition on hover (desktop) or tap (touch) */
+  .gloss { border-bottom: 1px dotted var(--tan); cursor: help; position: relative; }
+  .gloss > .gloss-pop { visibility: hidden; opacity: 0; position: absolute; bottom: 135%; left: 0; z-index: 40;
+    width: 230px; background: #0f0c08; color: var(--sand); border: 1px solid var(--accent); border-radius: 5px;
+    padding: 0.5rem 0.65rem; font-size: 0.74rem; line-height: 1.35; font-family: 'Atkinson Hyperlegible', sans-serif;
+    text-transform: none; letter-spacing: 0; font-weight: 400; box-shadow: 0 6px 20px rgba(0,0,0,0.5); transition: opacity .12s; }
+  .gloss:hover > .gloss-pop, .gloss.open > .gloss-pop { visibility: visible; opacity: 1; }
+  .gloss > .gloss-pop b { color: var(--tan); }
+  .bs-table td { padding: 0.28rem 0.5rem; border: none; }
+  .bs-table tr.rule td { border-top: 1px solid var(--border); }
+  .bs-num { font-family: var(--mono); text-align: right; }
+  .bs-neg { color: #d99079; }
 </style>
 </head>
 <body>
@@ -169,6 +181,11 @@
         <div class="dec-sub">Adopt at most one. Fit is how well it suits your county.</div>
         <div id="techPills"></div>
       </div>
+      <div class="dec-block">
+        <div class="dec-head">Genetics Program</div>
+        <div class="dec-sub">Buy proven AI semen instead of chasing a bull at auction. Cheaper, but it does not always settle.</div>
+        <div id="semenOffers"></div>
+      </div>
 
       <div class="consequence" id="boardConsequence"></div>
       <div class="row" style="margin-top:0.8rem">
@@ -243,6 +260,36 @@
 'use strict';
 
 const supa = supabase.createClient(window.SUPA_URL, window.SUPA_ANON_KEY);
+
+// ---- glossary: hover/tap definitions for the vocabulary students will not know
+// (the Kenya-game move). g('feederIdx','...text...') wraps a term in a dotted span. ----
+const GLOSSARY = {
+  feederIdx: '<b>Feeder cattle index</b>: the market price of young cattle sold to feedlots, indexed to a 2023-24 baseline of 1.00. Bull prices ride this index (elasticity 0.54): when feeders are high, good genetics are worth more.',
+  dollarBeef: '<b>$Beef ($B)</b>: an all-purpose dollar index of a bull\'s genetic merit for a commercial beef herd, combining growth and carcass value. Higher $B means his calves are worth more. Real Angus sale bulls run about $100 to $195.',
+  epd: '<b>EPD</b> (Expected Progeny Difference): the predicted performance of a bull\'s future calves for one trait, versus breed average. CED = calving ease, WW = weaning weight, YW = yearling weight, MARB = marbling.',
+  tier: '<b>Tier</b>: the bull\'s quality bracket, set by his real sale price. commercial < mid < premium < elite. Elite bulls carry the genetics AND the pedigree brand that sells semen and reputation.',
+  anchor: '<b>Anchor</b>: the typical market price for a bull of this tier this year, after adjusting for the feeder index. Your starting reference for what a fair bid looks like.',
+  reserve: '<b>Reserve</b>: the minimum bid the seller will accept (82% of anchor). A bid below reserve does not win the bull.',
+  coverage: '<b>Coverage</b>: the share of your cow herd one bull actually breeds (roughly 150 cows per bull). Bigger herds move their genetics slower because one great bull reaches a smaller fraction of the cows. Genomic testing (AI) doubles reach.',
+  equity: '<b>Equity</b>: what the ranch is worth if you sold out today. Cash, minus debt, plus the market value of the herd. This is the real scoreboard behind the visible metrics.',
+  semen: '<b>AI semen</b>: straws from a proven elite sire, bred by artificial insemination. Far cheaper per calf than buying the bull, but AI does not always settle: conception runs about 55 to 65 percent, so how much of your herd it improves is a gamble each season.',
+  conception: '<b>Conception rate</b>: the share of cows that actually get bred and carry a calf. A natural-service bull settles about 90 percent; AI runs 55 to 65 percent. That gap is the risk you take for cheaper elite genetics.',
+  drawdown: '<b>Drawdown</b>: how far your operating equity fell from its peak. A resilience measure: defensive strategies are scored on riding out drought and shocks with a small drawdown.',
+  premium: '<b>Brand premium</b>: the extra price your calves fetch above the commodity market because of your reputation and marketing. Seedstock and elite-genetics ranches live on this.',
+};
+let _glossId = 0;
+function g(key, label) {
+  const def = GLOSSARY[key]; if (!def) return label;
+  const id = 'gl' + (_glossId++);
+  return `<span class="gloss" id="${id}" onclick="toggleGloss('${id}',event)">${label}<span class="gloss-pop">${def}</span></span>`;
+}
+function toggleGloss(id, ev) {
+  // tap-to-toggle on touch; hover handles desktop. Close others first.
+  if (ev) ev.stopPropagation();
+  document.querySelectorAll('.gloss.open').forEach(e => { if (e.id !== id) e.classList.remove('open'); });
+  const el = document.getElementById(id); if (el) el.classList.toggle('open');
+}
+document.addEventListener('click', () => document.querySelectorAll('.gloss.open').forEach(e => e.classList.remove('open')));
 
 let GAME_ID   = null;
 let TEAM_ID   = null;
@@ -456,8 +503,8 @@ const ST_PATHS = {
 };
 const ST_LBL = { OR: { x: 90, y: 140 }, ID: { x: 210, y: 190 }, MT: { x: 312, y: 88 }, WY: { x: 358, y: 192 }, CO: { x: 374, y: 298 }, NV: { x: 96, y: 292 }, UT: { x: 212, y: 336 } };
 
-let boardChoice = { herd: 'hold', debt: 'hold', techs: [] };
-let boardBaseSt = null, boardWorld = null;
+let boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null };
+let boardBaseSt = null, boardWorld = null, boardSemen = [];
 
 function boardKey() { return 'board_' + GAME_ID + '_' + TEAM_ID + '_' + CUR_YEAR; }
 function droughtColor(sev) { return sev >= 1.0 ? '#9b3a1a' : sev >= 0.5 ? '#c98a2b' : '#6b7c5c'; }
@@ -478,9 +525,9 @@ function debtDelta(st, w, mode) {
 // the one place decisions hit state, shared by the live preview and the real submit.
 // Voluntary borrowing and tech honor the year-gated unlocks (the locked UI never sends
 // them, but the guard keeps a stale client honest); distress borrowing is exempt.
-function applyDecisions(r, w, expandCows, debtAction, techChoices) {
+function applyDecisions(r, w, expandCows, debtAction, techChoices, semenChoice) {
   if (debtAction > 0 && (w.year || CUR_YEAR) < RanchEngine.UNLOCKS.debt) debtAction = 0;
-  if ((w.year || CUR_YEAR) < RanchEngine.UNLOCKS.tech) techChoices = [];
+  if ((w.year || CUR_YEAR) < RanchEngine.UNLOCKS.tech) { techChoices = []; semenChoice = null; }
   if (r.cash < 0 && r.a.debtCap > 0) { const room = r.a.debtCap * Math.max(0, RanchEngine.equity(r, w)) - r.debt; const draw = Math.min(-r.cash, Math.max(0, room)); if (draw > 0) { r.debt += draw; r.cash += draw; } }
   if (r.cash < 0) { const sell = Math.min(Math.max(0, r.herd - 100), Math.ceil(-r.cash / (1200 * w.feederIdx))); if (sell > 0) { r.herd -= sell; r.cash += sell * 1150 * w.feederIdx; r.rep -= 2; } }
   if (expandCows > 0) { const cp = 1675 * w.feederIdx; const mx = Math.min(expandCows, r.landCap - r.herd, Math.round(r.herd * 0.35), Math.floor(r.cash / cp)); if (mx > 0) { r.herd += mx; r.cash -= mx * cp; } }
@@ -492,6 +539,9 @@ function applyDecisions(r, w, expandCows, debtAction, techChoices) {
   for (const t of (techChoices || [])) {
     if (!r.tech.has(t) && r.cash >= RanchEngine.TECHS[t].capex) { r.tech.add(t); r.cash -= RanchEngine.TECHS[t].capex; }
   }
+  // AI-semen program: engine buySemen rolls the conception rate and moves the herd next
+  // production year (weighted by that rate). One program per season.
+  if (semenChoice && boardSemen[semenChoice]) RanchEngine.buySemen(r, w, boardSemen[semenChoice]);
   return r;
 }
 function choiceNumbers() {
@@ -499,6 +549,7 @@ function choiceNumbers() {
     expandCows: herdDelta(boardBaseSt, boardWorld, boardChoice.herd),
     debtAction: debtDelta(boardBaseSt, boardWorld, boardChoice.debt),
     techChoices: boardChoice.techs,
+    semenChoice: boardChoice.semen,
   };
 }
 
@@ -510,7 +561,8 @@ async function refreshBoard(world) {
   if (!baseRaw) { baseRaw = JSON.stringify(team.state); localStorage.setItem(boardKey(), baseRaw); }
   boardBaseSt = reviveState(JSON.parse(baseRaw));
   boardWorld = world || RanchEngine.newWorld();
-  boardChoice = { herd: 'hold', debt: 'hold', techs: [] };
+  boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null };
+  boardSemen = (boardWorld && boardWorld.semenCatalog) || [];
   const st = boardBaseSt, w = boardWorld, reg = RanchEngine.REGIONS[st.region];
   const sev = RanchEngine.droughtSeverity(w, st.region);
 
@@ -544,8 +596,30 @@ async function refreshBoard(world) {
     `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`
   ).join('');
 
-  renderHerdOptions(); renderDebtOptions(); renderTechOptions();
+  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers();
   updateConsequence();
+}
+
+function renderSemenOffers() {
+  const el = document.getElementById('semenOffers');
+  if (!el) return;
+  const st = boardBaseSt;
+  if (CUR_YEAR < RanchEngine.UNLOCKS.tech) { el.innerHTML = lockedNote('AI semen programs open in year ' + RanchEngine.UNLOCKS.tech + ' with the genetics vendors.'); return; }
+  if (st.semen && st.semen.boughtYear === CUR_YEAR) {
+    el.innerHTML = `<div style="font-size:0.82rem;color:var(--sage)">Booked ${esc(st.semen.name)} this season (conception rolled at breeding).</div>`;
+    return;
+  }
+  if (!boardSemen.length) { el.innerHTML = '<span style="color:var(--muted);font-size:0.82rem">No semen offered this year.</span>'; return; }
+  const intro = `<div style="font-size:0.76rem;color:var(--muted);margin-bottom:0.4rem">Proven ${g('semen', 'AI semen')} moves your herd\'s genetics for a fraction of a bull\'s price, but ${g('conception', 'conception')} is a gamble (about 55 to 65 percent settle, higher with genomic testing). Pick at most one program.</div>`;
+  const cards = boardSemen.map((s, i) => {
+    const on = boardChoice.semen === String(i);
+    const db = RanchEngine.dollarBeef(s.traits);
+    const afford = st.cash >= s.price;
+    return `<button type="button" class="opt${on ? ' on' : ''}" ${afford ? '' : 'disabled'} onclick="setChoice('semen','${i}')" style="min-width:100%;margin-bottom:0.4rem;${afford ? '' : 'opacity:0.5'}">` +
+      `<div class="opt-t">${esc(s.name)} <span class="tag tag-${s.tier}" style="margin-left:0.3rem">${s.tier}</span></div>` +
+      `<div class="opt-d">$${s.price.toLocaleString()} the program &middot; $Beef ${db} &middot; ${afford ? 'genetics without the auction' : 'more cash than you have'}</div></button>`;
+  }).join('');
+  el.innerHTML = intro + `<div class="opt-row" style="flex-direction:column">${cards}</div>`;
 }
 
 // ---- Real geographic map (projected from window.RANCH_GEO; falls back to the crude
@@ -686,6 +760,10 @@ function setChoice(group, mode) {
     if (i >= 0) boardChoice.techs.splice(i, 1); else boardChoice.techs.push(mode);
     renderTechOptions();
   }
+  else if (group === 'semen') {
+    boardChoice.semen = boardChoice.semen === mode ? null : mode; // tap again to clear
+    renderSemenOffers();
+  }
   else if (group === 'debt' && mode === 'nolev') { /* not selectable */ }
   else { boardChoice[group] = mode; if (group === 'herd') renderHerdOptions(); else renderDebtOptions(); }
   updateConsequence();
@@ -695,7 +773,7 @@ function updateConsequence() {
   const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
   const w = boardWorld;
   const n = choiceNumbers();
-  applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices);
+  applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
   const bidCeil = Math.round(r.cash * (r.a.bidCashCap || 0));
   const el = document.getElementById('boardConsequence');
   el.innerHTML =
@@ -723,7 +801,7 @@ async function submitBoard() {
   const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
   const w = boardWorld;
   const n = choiceNumbers();
-  applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices);
+  applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
 
   const { error } = await supa.from('teams').update({ state: JSON.parse(JSON.stringify(r, setReplacer)) }).eq('id', TEAM_ID);
   if (error) { msg('Could not save operations: ' + error.message, 'err'); return; }
@@ -796,6 +874,21 @@ async function refreshAuction(world) {
   updateExposure();
 }
 
+// a bull's $Beef: the real catalog value when we have it, otherwise computed from his
+// catalog traits so every lot shows one comparable number
+function bullDollarBeef(b) {
+  if (b.meta && b.meta.dollars && b.meta.dollars.b !== null && b.meta.dollars.b !== undefined) return b.meta.dollars.b;
+  if (b.catalog) return RanchEngine.dollarBeef(b.catalog);
+  return null;
+}
+// where a herd trait sits on the 1-10 genetic scale, in words a student can read
+function herdLevel(v) {
+  if (v >= 7.0) return { word: 'elite', color: '#e8b84a' };
+  if (v >= 6.0) return { word: 'strong', color: '#acc87a' };
+  if (v >= 4.7) return { word: 'average', color: '#ab9c82' };
+  if (v >= 3.8) return { word: 'below avg', color: '#c98a2b' };
+  return { word: 'weak', color: '#d99079' };
+}
 function renderHerdPanel(st) {
   const el = document.getElementById('auctionHerd');
   if (!st || !st.g) { el.innerHTML = ''; return; }
@@ -803,22 +896,28 @@ function renderHerdPanel(st) {
   const arch = RanchEngine.ARCHETYPES[ARCHETYPE] || { traitVal: {} };
   const rows = RanchEngine.TRAITS.map(t => {
     const rw = reg.w[t] || 1, av = arch.traitVal[t] || 1;
+    const lv = herdLevel(st.g[t] || 0);
     return `<tr>
       <td style="text-align:left">${TRAIT_LABEL[t]}</td>
-      <td><strong>${(st.g[t] || 0).toFixed(1)}</strong></td>
+      <td><strong>${(st.g[t] || 0).toFixed(1)}</strong> <span style="color:${lv.color};font-size:0.72rem">${lv.word}</span></td>
       <td style="color:${emphColor(rw)}">${emphasis(rw)}</td>
       <td style="color:${emphColor(av)}">${emphasis(av)}</td>
     </tr>`;
   }).join('');
+  const db = RanchEngine.dollarBeef(st.g);
   el.innerHTML =
     `<div style="border:1px solid var(--border);border-radius:5px;padding:0.7rem 0.9rem;background:var(--surface2)">
-      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem">
-        Your herd at <strong>${esc(st.county || '')}</strong>. A bull helps most when its trait
-        beats your herd number AND that trait reads High for your county or objective.
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:0.4rem">
+        <div style="font-size:0.8rem;color:var(--muted)">Your herd at <strong>${esc(st.county || '')}</strong></div>
+        <div style="font-size:0.82rem">${g('dollarBeef', '$Beef')}: <strong style="font-family:var(--mono);color:var(--accent)">${db}</strong></div>
+      </div>
+      <div style="font-size:0.76rem;color:var(--muted);margin-bottom:0.5rem">
+        A bull helps most when its trait <strong>beats your herd number</strong> and that trait reads High for your county or objective.
+        "Your herd" shows where you sit today on the genetic scale.
       </div>
       <table style="width:100%;font-size:0.82rem;border-collapse:collapse">
         <thead><tr>
-          <th style="text-align:left">Trait</th><th>Your herd</th><th>County rewards</th><th>Your objective</th>
+          <th style="text-align:left">Trait</th><th>Your herd (level)</th><th>County rewards</th><th>Your objective</th>
         </tr></thead>
         <tbody>${rows}</tbody>
       </table>
@@ -856,7 +955,9 @@ function renderBullCards(bulls, world, st, bidMap) {
           ((b.meta && b.meta.consignor) ? `, consigned by ${esc(b.meta.consignor)}` : '') + `</div>` : '') +
       ((b.meta && b.meta.epds) ? `<div style="font-family:var(--mono);font-size:0.66rem;color:var(--dim);margin-bottom:0.5rem">` +
           ['ced', 'ww', 'yw', 'milk', 'marb'].filter(k => b.meta.epds[k] !== null && b.meta.epds[k] !== undefined)
-            .map(k => k.toUpperCase() + ' ' + b.meta.epds[k]).join(' | ') + `</div>` : `<div style="margin-bottom:0.35rem"></div>`) +
+            .map(k => k.toUpperCase() + ' ' + b.meta.epds[k]).join(' | ') +
+          (bullDollarBeef(b) !== null ? ` <span style="color:var(--accent)">| ${g('dollarBeef', '$B')} ${bullDollarBeef(b)}</span>` : '') + `</div>`
+        : `<div style="margin-bottom:0.35rem"></div>`) +
       `<div class="epd-grid" style="margin-bottom:0.5rem">` +
         Object.entries(b.catalog).map(([k, v]) => {
           // mark traits where this bull beats your current herd (an upgrade for you)
@@ -865,7 +966,7 @@ function renderBullCards(bulls, world, st, bidMap) {
             (up ? ` <span style="color:#2e7d32;font-weight:600">+</span>` : '') + `</div>`;
         }).join('') +
       `</div>` +
-      `<div class="range-note">Typical range at this tier: $${lo.toLocaleString()} to $${hi.toLocaleString()} (anchor $${Math.round(b.anchor).toLocaleString()})</div>` +
+      `<div class="range-note">Typical range at this ${g('tier', 'tier')}: $${lo.toLocaleString()} to $${hi.toLocaleString()} (${g('anchor', 'anchor')} $${Math.round(b.anchor).toLocaleString()}, ${g('reserve', 'reserve')} $${Math.round(b.reserve).toLocaleString()})</div>` +
       (b.winner_team
         ? `<div class="submitted" style="margin-top:0.4rem">Resolved</div>`
         : `<div class="bid-row" style="margin-top:0.4rem">` +
@@ -898,8 +999,10 @@ function bullPhoto(idx) {
 function bullPhotoPlate(b, idx) {
   const src = bullPhoto(idx || 0);
   if (src) {
-    return `<div style="position:relative;height:150px;background:#12100c">` +
-      `<img src="${src}" alt="Angus bull" style="width:100%;height:100%;object-fit:cover;display:block;opacity:0.96">` +
+    // contain (not cover) so the whole bull always shows; the dark plate letterboxes
+    // the odd portrait shot instead of cropping the animal's head or feet off
+    return `<div style="position:relative;height:150px;background:#12100c;display:flex;align-items:center;justify-content:center">` +
+      `<img src="${src}" alt="Angus bull" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;opacity:0.97">` +
       `<span style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(18,16,12,0.85));color:#cbb890;font-size:0.62rem;font-family:var(--mono);padding:0.5rem 0.6rem 0.3rem">Representative image, not this exact lot</span>` +
       `</div>`;
   }
@@ -987,13 +1090,63 @@ async function showResults(world) {
     html += `<div style="font-size:0.85rem;color:var(--dim)">Your ranch after the year: ` +
       `<strong style="color:var(--text)">${st.herd.toLocaleString()}</strong> head, cash ` +
       `<strong style="color:var(--text)">$${Math.round(st.cash).toLocaleString()}</strong>, ` +
-      `debt $${Math.round(st.debt).toLocaleString()}, genetics ${gAvg.toFixed(1)}, reputation ${Math.round(st.rep)}.</div>`;
+      `debt $${Math.round(st.debt).toLocaleString()}, ${g('dollarBeef', '$Beef')} ${RanchEngine.dollarBeef(st.g)}, reputation ${Math.round(st.rep)}.</div>`;
+    html += booksCard(st, world);
   }
   html += cattlemensWeekly(world, bulls || [], teams || [], st, nameById);
   html += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem">Waiting for the instructor to advance to the next year.</div>`;
 
   document.getElementById('cardWon').innerHTML = html;
   document.getElementById('secWon').style.display = '';
+}
+
+// ---- Your Books: the income statement (does the money flow make sense?) and the
+// balance sheet (do debt and equity hold?). Numbers come straight from the engine's
+// lastStmt snapshot and the same equity() the scoring uses, so what you see is the
+// actual state, not a re-derivation. ----
+function money(n) {
+  const v = Math.round(n);
+  return (v < 0 ? '-$' : '$') + Math.abs(v).toLocaleString();
+}
+function booksCard(st, w) {
+  const s = st.lastStmt;
+  const herdVal = st.herd * 1400 * Math.pow((w && w.feederIdx) || 1, 0.8) * (0.7 + RanchEngine.avg(RanchEngine.TRAITS.map(t => st.g[t])) / 10 * 0.6);
+  const eq = RanchEngine.equity(st, w || RanchEngine.newWorld());
+  const row = (label, val, opts = {}) => {
+    const cls = 'bs-num' + (val < 0 ? ' bs-neg' : '');
+    return `<tr class="${opts.rule ? 'rule' : ''}"><td style="color:${opts.strong ? 'var(--text)' : 'var(--dim)'}">${label}</td>` +
+      `<td class="${cls}"${opts.strong ? ' style="font-weight:700;color:var(--text)"' : ''}>${opts.paren ? '(' + money(Math.abs(val)).replace('$', '$') + ')' : money(val)}</td></tr>`;
+  };
+  let inc = '';
+  if (s) {
+    inc = `<div style="flex:1;min-width:210px">` +
+      `<div style="font-family:var(--mono);font-size:0.68rem;color:var(--accent);letter-spacing:0.08em;margin-bottom:0.3rem">INCOME STATEMENT</div>` +
+      `<table class="bs-table" style="width:100%;font-size:0.8rem">` +
+      row('Calf and beef sales', s.revenue) +
+      (s.semenRoyalty > 0 ? row('AI-stud royalties', s.semenRoyalty) : '') +
+      row('Cow and feed costs', -s.cowCost) +
+      row('Labor', -s.labor) +
+      row('Overhead', -s.overhead) +
+      row('Herd-bull replacement', -s.bullCost) +
+      (s.breeding > 0 ? row('Bull development', -s.breeding) : '') +
+      (s.interest > 0 ? row(g('equity', 'Interest on debt'), -s.interest) : '') +
+      row('Net for the year', s.net, { rule: true, strong: true }) +
+      `</table></div>`;
+  }
+  const bs = `<div style="flex:1;min-width:210px">` +
+    `<div style="font-family:var(--mono);font-size:0.68rem;color:var(--accent);letter-spacing:0.08em;margin-bottom:0.3rem">BALANCE SHEET</div>` +
+    `<table class="bs-table" style="width:100%;font-size:0.8rem">` +
+    row('Cash', st.cash) +
+    row('Herd value', herdVal) +
+    row('Total assets', st.cash + herdVal, { rule: true, strong: true }) +
+    row('Debt', -st.debt) +
+    row(g('equity', 'Owner equity'), eq, { rule: true, strong: true }) +
+    `</table>` +
+    (st.debt > 0 ? `<div style="font-size:0.72rem;color:var(--muted);margin-top:0.35rem">Debt-to-equity ${(st.debt / Math.max(1, eq)).toFixed(2)}. ${w && w.rateHikeYears > 0 ? 'Rates elevated at 13%.' : 'Interest at 7%.'}</div>` : '') +
+    `</div>`;
+  return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
+    `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">Your Books</div>` +
+    `<div style="display:flex;gap:1.4rem;flex-wrap:wrap">${inc}${bs}</div></div>`;
 }
 
 // ---- Cattlemen's Weekly: the year-end industry report (the Capsim Courier / Glo-Bus
