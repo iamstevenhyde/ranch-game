@@ -110,6 +110,9 @@
   .deal-status { font-family: var(--mono); font-size: 0.68rem; padding: 0.12rem 0.4rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
   .ds-proposed { background: #3a2c10; color: #e8b84a; border: 1px solid #6a521c; }
   .ds-accepted { background: #26301a; color: #acc87a; border: 1px solid #3c4a26; }
+  .deal-meter { font-size: 0.78rem; color: var(--dim); margin: 0.15rem 0 0.5rem; min-height: 1em; }
+  .deal-meter b { color: var(--tan); font-family: var(--mono); }
+  .deal-mkt { color: var(--muted); font-size: 0.74rem; font-family: var(--mono); }
   .dec-head { font-family: var(--serif); font-weight: 600; font-size: 1rem; color: var(--text); margin-bottom: 0.15rem; }
   .dec-sub { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.5rem; }
   .opt-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
@@ -972,38 +975,59 @@ function setCowBuy(tier, delta) {
   renderCowMarket(); updateConsequence();
 }
 
-// ---- Co-opetition: team-to-team deals (Phase 2) ----
-// Proposing/accepting only writes status rows to the deals table; the transfer settles at
-// resolution (admin), like sealed bids, so the board's snapshot lock-in never clobbers it.
+// ---- Co-opetition: team-to-team deals (Phase 2), fantasy-football negotiation ----
+// Propose / counter / accept writes only status + terms to the deals table; the transfer
+// settles at resolution (admin), like sealed bids, so the board's snapshot lock-in never
+// clobbers it. turn_team tracks whose move it is; counters bounce the price back and forth.
+// The value meter shows NEUTRAL market value (tier anchor) vs the offered price.
 let dealTeams = [], myDeals = [];
 const DEAL_TYPE_LABEL = { bull_trade: 'Trade a bull', semen_split: 'Split an AI straw', infra_coop: 'Co-fund a project', complementor: 'Embryo / flush share' };
 async function refreshDeals() {
   if (!GAME_ID || !TEAM_ID) return;
   const [{ data: teams }, { data: deals }] = await Promise.all([
-    supa.from('teams').select('id,name').eq('game_id', GAME_ID),
+    supa.from('teams').select('id,name,state').eq('game_id', GAME_ID),
     supa.from('deals').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR).in('status', ['proposed', 'accepted']),
   ]);
-  dealTeams = teams || [];
+  dealTeams = (teams || []).map(t => ({ id: t.id, name: t.name, region: t.state && t.state.region }));
   myDeals = (deals || []).filter(d => d.proposer_team === TEAM_ID || d.partner_team === TEAM_ID);
   if (document.getElementById('dealForm')) renderDealLists(); else renderDealsPanel();
 }
 function dealNameById() { return Object.fromEntries(dealTeams.map(t => [t.id, t.name])); }
+function myRegion() { return boardBaseSt && boardBaseSt.region; }
+function counterpart(d) { return d.proposer_team === TEAM_ID ? d.partner_team : d.proposer_team; }
+// neutral market value of a bull at this year's feeder index (tier anchor), for the meter
+function bullMarketValue(tier) {
+  const t = RanchEngine.TIER.find(x => x.key === tier);
+  const f = Math.pow((boardWorld && boardWorld.feederIdx) || 1, 0.54); // FEEDER_ELASTICITY
+  return t ? Math.round(t.anchor * f) : 0;
+}
 function renderDealsPanel() {
   const el = document.getElementById('dealsPanel'); if (!el) return;
   const others = dealTeams.filter(t => t.id !== TEAM_ID);
   if (!others.length) { el.innerHTML = '<div style="color:var(--muted);font-size:0.82rem">No other teams to deal with yet.</div>'; return; }
-  const partnerOpts = others.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('');
   const typeOpts = Object.entries(DEAL_TYPE_LABEL).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
   el.innerHTML =
     `<div class="deal-form" id="dealForm">` +
-      `<div class="deal-field"><label>Partner</label><select id="dealPartner">${partnerOpts}</select></div>` +
-      `<div class="deal-field"><label>Deal</label><select id="dealType" onchange="renderDealTerms()">${typeOpts}</select></div>` +
-      `<div class="deal-field" id="dealTerms" style="flex:1;min-width:180px"></div>` +
+      `<div class="deal-field"><label>Deal</label><select id="dealType" onchange="onDealTypeChange()">${typeOpts}</select></div>` +
+      `<div class="deal-field"><label>Partner</label><select id="dealPartner"></select></div>` +
+      `<div class="deal-field" id="dealTerms" style="flex:1;min-width:190px"></div>` +
       `<button type="button" onclick="proposeDeal()">Send offer</button>` +
     `</div>` +
+    `<div class="deal-meter" id="dealMeter"></div>` +
     `<div id="dealLists"></div>`;
-  renderDealTerms();
+  onDealTypeChange();
   renderDealLists();
+}
+function onDealTypeChange() { renderDealPartner(); renderDealTerms(); }
+// partner list; infrastructure co-ops are limited to SAME-REGION ranches (shared ground / water)
+function renderDealPartner() {
+  const sel = document.getElementById('dealPartner'); if (!sel) return;
+  const type = document.getElementById('dealType').value;
+  let others = dealTeams.filter(t => t.id !== TEAM_ID);
+  if (type === 'infra_coop') others = others.filter(t => t.region && t.region === myRegion());
+  sel.innerHTML = others.length
+    ? others.map(t => `<option value="${t.id}">${esc(t.name)}</option>`).join('')
+    : `<option value="">(no team in your region)</option>`;
 }
 // type-specific terms inputs
 function renderDealTerms() {
@@ -1011,28 +1035,59 @@ function renderDealTerms() {
   const type = document.getElementById('dealType').value;
   if (type === 'bull_trade') {
     const bulls = (boardBaseSt && boardBaseSt.bulls) || [];
-    if (!bulls.length) { wrap.innerHTML = `<label>Your bull</label><div style="color:var(--muted);font-size:0.8rem">You own no bulls to trade yet.</div>`; return; }
+    if (!bulls.length) { wrap.innerHTML = `<label>Your bull</label><div style="color:var(--muted);font-size:0.8rem">You own no bulls to trade yet.</div>`; updateDealMeter(); return; }
     const opts = bulls.map((b, i) => `<option value="${i}">${esc(b.name || b.sire || 'Bull')} (${b.tier}, $B ${RanchEngine.dollarBeef(b.truth)})</option>`).join('');
-    wrap.innerHTML = `<label>Your bull &rarr; partner, for $</label><div style="display:flex;gap:0.4rem"><select id="dealBull">${opts}</select><input type="number" id="dealPrice" min="0" placeholder="price" style="width:96px"></div>`;
+    wrap.innerHTML = `<label>Your bull &rarr; partner, for $</label><div style="display:flex;gap:0.4rem"><select id="dealBull" onchange="updateDealMeter()">${opts}</select><input type="number" id="dealPrice" min="0" placeholder="price" style="width:96px" oninput="updateDealMeter()"></div>`;
   } else if (type === 'semen_split') {
-    if (!boardSemen.length) { wrap.innerHTML = `<label>Sire</label><div style="color:var(--muted);font-size:0.8rem">No AI straws offered this year.</div>`; return; }
+    if (!boardSemen.length) { wrap.innerHTML = `<label>Sire</label><div style="color:var(--muted);font-size:0.8rem">No AI straws offered this year.</div>`; updateDealMeter(); return; }
     const opts = boardSemen.map((s, i) => `<option value="${i}">${esc(s.name)} (${s.tier}, $${s.price.toLocaleString()})</option>`).join('');
-    wrap.innerHTML = `<label>Shared straw (you split the cost)</label><select id="dealSire" onchange="renderDealTerms()">${opts}</select>`;
+    wrap.innerHTML = `<label>Shared straw (split 50/50)</label><select id="dealSire" onchange="updateDealMeter()">${opts}</select>`;
   } else if (type === 'infra_coop') {
-    if (CUR_YEAR < RanchEngine.UNLOCKS.tech) { wrap.innerHTML = `<label>Project</label><div style="color:var(--muted);font-size:0.8rem">The tech shelf opens in year ${RanchEngine.UNLOCKS.tech}.</div>`; return; }
+    if (CUR_YEAR < RanchEngine.UNLOCKS.tech) { wrap.innerHTML = `<label>Project</label><div style="color:var(--muted);font-size:0.8rem">The tech shelf opens in year ${RanchEngine.UNLOCKS.tech}.</div>`; updateDealMeter(); return; }
     const owned = boardBaseSt ? boardBaseSt.tech : new Set();
     const avail = Object.keys(RanchEngine.TECHS).filter(t => !owned.has(t));
-    if (!avail.length) { wrap.innerHTML = `<label>Project</label><div style="color:var(--muted);font-size:0.8rem">You already run every technology.</div>`; return; }
-    const opts = avail.map(t => { const each = Math.round(RanchEngine.TECHS[t].capex * RanchEngine.DEAL.coopCapexMult); return `<option value="${t}">${TECH_LABEL[t]} ($${each.toLocaleString()} each vs $${RanchEngine.TECHS[t].capex.toLocaleString()} solo)</option>`; }).join('');
-    wrap.innerHTML = `<label>Co-funded project (you each pay the reduced capex)</label><select id="dealTech">${opts}</select>`;
+    if (!avail.length) { wrap.innerHTML = `<label>Project</label><div style="color:var(--muted);font-size:0.8rem">You already run every technology.</div>`; updateDealMeter(); return; }
+    const opts = avail.map(t => `<option value="${t}">${TECH_LABEL[t]}</option>`).join('');
+    wrap.innerHTML = `<label>Co-funded project (same region only)</label><select id="dealTech" onchange="updateDealMeter()">${opts}</select>`;
   } else { // complementor / embryo
-    wrap.innerHTML = `<label>You pay partner $ (your herd genetics blend toward theirs)</label><input type="number" id="dealPrice" min="0" placeholder="price" style="width:120px">`;
+    wrap.innerHTML = `<label>You pay partner $ (your genetics blend toward theirs)</label><input type="number" id="dealPrice" min="0" placeholder="price" style="width:120px" oninput="updateDealMeter()">`;
   }
+  updateDealMeter();
+}
+// neutral market-value meter for the draft offer
+function updateDealMeter() {
+  const el = document.getElementById('dealMeter'); if (!el) return;
+  const type = (document.getElementById('dealType') || {}).value;
+  let html = '';
+  if (type === 'bull_trade') {
+    const bulls = (boardBaseSt && boardBaseSt.bulls) || [];
+    const b = bulls[Number((document.getElementById('dealBull') || {}).value)];
+    const price = Number((document.getElementById('dealPrice') || {}).value) || 0;
+    if (b) {
+      const mv = bullMarketValue(b.tier), diff = price - mv;
+      const tilt = !price ? '' : Math.abs(diff) < mv * 0.08 ? ' (near market)' : diff > 0 ? ` (buyer overpays $${Math.round(diff).toLocaleString()})` : ` (buyer underpays $${Math.round(-diff).toLocaleString()})`;
+      html = `Market value of this ${b.tier} bull ~<b>$${mv.toLocaleString()}</b>${price ? ` &middot; price <b>$${price.toLocaleString()}</b>${tilt}` : ''}`;
+    }
+  } else if (type === 'semen_split') {
+    const s = boardSemen[Number((document.getElementById('dealSire') || {}).value)];
+    if (s) html = `Straw lists at <b>$${s.price.toLocaleString()}</b> &middot; you each pay <b>$${Math.round(s.price / 2).toLocaleString()}</b>`;
+  } else if (type === 'infra_coop') {
+    const tech = (document.getElementById('dealTech') || {}).value;
+    if (RanchEngine.TECHS[tech]) { const solo = RanchEngine.TECHS[tech].capex, each = Math.round(solo * RanchEngine.DEAL.coopCapexMult); html = `Solo capex <b>$${solo.toLocaleString()}</b> &middot; co-op <b>$${each.toLocaleString()}</b> each, you each save <b>$${(solo - each).toLocaleString()}</b>`; }
+  } else {
+    const price = Number((document.getElementById('dealPrice') || {}).value) || 0;
+    if (price) html = `You pay <b>$${price.toLocaleString()}</b> for a one-time genetic blend from their herd (negotiated, no market anchor)`;
+  }
+  el.innerHTML = html;
 }
 async function proposeDeal() {
   const partner = document.getElementById('dealPartner').value;
   const type = document.getElementById('dealType').value;
   if (!partner) { msg('Pick a partner team.', 'err'); return; }
+  if (type === 'infra_coop') {
+    const p = dealTeams.find(t => t.id === partner);
+    if (!p || p.region !== myRegion()) { msg('Shared infrastructure is limited to a ranch in your region.', 'err'); return; }
+  }
   let terms = {};
   if (type === 'bull_trade') {
     const bulls = (boardBaseSt && boardBaseSt.bulls) || [];
@@ -1053,52 +1108,76 @@ async function proposeDeal() {
     if (price <= 0) { msg('Enter what you will pay for the embryo share.', 'err'); return; }
     terms = { kind: 'embryo', price };
   }
-  const { error } = await supa.from('deals').insert({ game_id: GAME_ID, year: CUR_YEAR, proposer_team: TEAM_ID, partner_team: partner, type, terms, status: 'proposed' });
+  const { error } = await supa.from('deals').insert({ game_id: GAME_ID, year: CUR_YEAR, proposer_team: TEAM_ID, partner_team: partner, type, terms, status: 'proposed', turn_team: partner, history: [{ by: TEAM_ID, terms }] });
   if (error) { msg('Could not send offer: ' + error.message, 'err'); return; }
-  msg('Offer sent. It settles at year-end if they accept.', 'ok');
+  msg('Offer sent. They can accept, counter, or decline.', 'ok');
   await refreshDeals();
 }
+// accept / decline: only the team whose turn it is may act
 async function respondDeal(id, status) {
-  const { error } = await supa.from('deals').update({ status }).eq('id', id).eq('partner_team', TEAM_ID);
+  const { error } = await supa.from('deals').update({ status }).eq('id', id).eq('turn_team', TEAM_ID);
   if (error) { msg('Could not update the deal: ' + error.message, 'err'); return; }
   await refreshDeals();
 }
-async function cancelDeal(id) {
-  await supa.from('deals').delete().eq('id', id).eq('proposer_team', TEAM_ID).eq('status', 'proposed');
+// counter: bump the price and bounce the offer back to the other team
+async function counterDeal(id) {
+  const d = myDeals.find(x => x.id === id); if (!d) return;
+  const price = Number((document.getElementById('ctr_' + id) || {}).value);
+  if (!(price > 0)) { msg('Enter a counter price.', 'err'); return; }
+  const terms = Object.assign({}, d.terms, { price });
+  const other = counterpart(d);
+  const history = (d.history || []).concat([{ by: TEAM_ID, terms }]);
+  const { error } = await supa.from('deals').update({ terms, turn_team: other, history }).eq('id', id).eq('turn_team', TEAM_ID);
+  if (error) { msg('Could not counter: ' + error.message, 'err'); return; }
+  msg('Counter sent.', 'ok');
   await refreshDeals();
 }
-function dealSummary(d, nameById) {
+async function withdrawDeal(id) {
+  await supa.from('deals').delete().eq('id', id).in('status', ['proposed']);
+  await refreshDeals();
+}
+function dealSummary(d) {
   const t = d.terms || {};
   if (d.type === 'bull_trade') return `${esc((t.bull && t.bull.name) || 'a bull')} for $${Math.round(t.price || 0).toLocaleString()}`;
   if (d.type === 'semen_split') return `split ${esc(t.name || 'an AI straw')} ($${Math.round((t.price || 0) / 2).toLocaleString()} each)`;
   if (d.type === 'infra_coop') return `co-fund ${TECH_LABEL[t.tech] || t.tech} ($${Math.round(RanchEngine.TECHS[t.tech].capex * RanchEngine.DEAL.coopCapexMult).toLocaleString()} each)`;
   return `embryo share for $${Math.round(t.price || 0).toLocaleString()}`;
 }
+// short neutral market note per deal card
+function dealMarketNote(d) {
+  const t = d.terms || {};
+  if (d.type === 'bull_trade') { const mv = bullMarketValue(t.bull && t.bull.tier); return `<span class="deal-mkt">mkt ~$${mv.toLocaleString()}</span>`; }
+  return '';
+}
 function renderDealLists() {
   const el = document.getElementById('dealLists'); if (!el) return;
   const nameById = dealNameById();
-  const incoming = myDeals.filter(d => d.partner_team === TEAM_ID && d.status === 'proposed');
-  const mine = myDeals.filter(d => d.proposer_team === TEAM_ID);
-  const agreed = myDeals.filter(d => d.status === 'accepted' && d.partner_team === TEAM_ID);
+  const head = txt => `<div style="font-family:var(--mono);font-size:0.7rem;color:var(--accent);letter-spacing:0.06em;margin:0.6rem 0 0.3rem">${txt}</div>`;
+  const myTurn = myDeals.filter(d => d.status === 'proposed' && d.turn_team === TEAM_ID);
+  const theirTurn = myDeals.filter(d => d.status === 'proposed' && d.turn_team !== TEAM_ID);
+  const agreed = myDeals.filter(d => d.status === 'accepted');
   let html = '';
-  if (incoming.length) {
-    html += `<div style="font-family:var(--mono);font-size:0.7rem;color:var(--accent);letter-spacing:0.06em;margin:0.5rem 0 0.3rem">INCOMING OFFERS</div>`;
-    html += incoming.map(d =>
-      `<div class="deal-card"><span><strong>${esc(nameById[d.proposer_team] || 'A team')}</strong> offers you ${dealSummary(d, nameById)}</span>` +
-      `<span class="deal-actions"><button onclick="respondDeal('${d.id}','accepted')">Accept</button>` +
-      `<button class="secondary" onclick="respondDeal('${d.id}','declined')">Decline</button></span></div>`).join('');
+  if (myTurn.length) {
+    html += head('AWAITING YOUR RESPONSE');
+    html += myTurn.map(d => {
+      const canCounter = d.type === 'bull_trade' || d.type === 'complementor';
+      const counterUI = canCounter ? `<input type="number" id="ctr_${d.id}" placeholder="counter $" style="width:96px;margin:0"><button onclick="counterDeal('${d.id}')">Counter</button>` : '';
+      return `<div class="deal-card"><span><strong>${esc(nameById[counterpart(d)] || 'A team')}</strong>: ${dealSummary(d)} ${dealMarketNote(d)}</span>` +
+        `<span class="deal-actions"><button onclick="respondDeal('${d.id}','accepted')">Accept</button>${counterUI}` +
+        `<button class="secondary" onclick="respondDeal('${d.id}','declined')">Decline</button></span></div>`;
+    }).join('');
+  }
+  if (theirTurn.length) {
+    html += head('WAITING ON THEM');
+    html += theirTurn.map(d =>
+      `<div class="deal-card"><span>With <strong>${esc(nameById[counterpart(d)] || 'a team')}</strong>: ${dealSummary(d)} ${dealMarketNote(d)}</span>` +
+      `<span class="deal-actions"><span class="deal-status ds-proposed">their move</span><button class="secondary" onclick="withdrawDeal('${d.id}')">Withdraw</button></span></div>`).join('');
   }
   if (agreed.length) {
-    html += agreed.map(d => `<div class="deal-card"><span>You accepted ${dealSummary(d, nameById)} from <strong>${esc(nameById[d.proposer_team] || 'a team')}</strong></span><span class="deal-status ds-accepted">settles at year-end</span></div>`).join('');
-  }
-  if (mine.length) {
-    html += `<div style="font-family:var(--mono);font-size:0.7rem;color:var(--accent);letter-spacing:0.06em;margin:0.6rem 0 0.3rem">YOUR OFFERS</div>`;
-    html += mine.map(d => {
-      const to = esc(nameById[d.partner_team] || 'a team');
-      const st = d.status === 'accepted' ? `<span class="deal-status ds-accepted">accepted, settles at year-end</span>` : `<span class="deal-status ds-proposed">waiting</span>`;
-      const cancel = d.status === 'proposed' ? `<button class="secondary" onclick="cancelDeal('${d.id}')">Cancel</button>` : '';
-      return `<div class="deal-card"><span>To <strong>${to}</strong>: ${dealSummary(d, nameById)}</span><span class="deal-actions">${st}${cancel}</span></div>`;
-    }).join('');
+    html += head('AGREED');
+    html += agreed.map(d =>
+      `<div class="deal-card"><span>With <strong>${esc(nameById[counterpart(d)] || 'a team')}</strong>: ${dealSummary(d)}</span>` +
+      `<span class="deal-status ds-accepted">settles at year-end</span></div>`).join('');
   }
   if (!html) html = `<div style="color:var(--muted);font-size:0.82rem">No deals yet. Make an offer above.</div>`;
   el.innerHTML = html;
