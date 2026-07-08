@@ -1383,7 +1383,9 @@ function startPolling() {
     if (game.phase !== PHASE || game.year !== CUR_YEAR) await handlePhaseChange(game);
     else {
       if (PHASE === 'market') await refreshMarket();
-      if (PHASE === 'auction') await refreshAuction(game.world);
+      // combined page: if the sale rendered empty (bulls arrived just after the phase
+      // flip), fill it once. Never re-render while lots are present, so typed bids/ops stay.
+      if (PHASE === 'board' && !document.querySelector('#bullCards > div')) await refreshAuction(game.world);
       if (PHASE === 'resolve' || PHASE === 'ended') await refreshStandings();
     }
   }, POLL_MS);

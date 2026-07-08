@@ -463,8 +463,10 @@ async function openYear() {
   const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
   const world = gRow.world || RanchEngine.newWorld();
   RanchEngine.stepWorld(world);
-  await supa.from('games').update({ year: CUR_YEAR, world, phase: 'board' }).eq('id', GAME_ID);
-  await logDecision(null, 'phase_advanced', { from: (CUR_YEAR === 1 ? 'market' : 'resolve'), to: 'board', year: CUR_YEAR });
+  // write year + world first, but hold the phase flip until the bulls exist, or the team
+  // would render an empty sale in the window before generateBulls finishes and never
+  // re-render (the combined page shows operations + bulls together).
+  await supa.from('games').update({ year: CUR_YEAR, world }).eq('id', GAME_ID);
 
   // AI ranches buy their ranches now (year 1 only; idempotent), AFTER the humans have
   // taken first pick, then make operational decisions.
@@ -472,6 +474,9 @@ async function openYear() {
   await applyAiDecisions(world);
   // generate this year's bulls up front so they appear on the combined team page
   await generateBulls(world);
+  // NOW open the combined page: bulls are in place
+  await supa.from('games').update({ phase: 'board' }).eq('id', GAME_ID);
+  await logDecision(null, 'phase_advanced', { from: (CUR_YEAR === 1 ? 'market' : 'resolve'), to: 'board', year: CUR_YEAR });
 
   setPhaseChip('board');
   showSection('secBoard');
