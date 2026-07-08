@@ -1,0 +1,1125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ranch Strategy Game | Team</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  /* Ranch Ledger palette (oiled leather, tan on near-black), matched to the-board.html */
+  :root {
+    --bg:      #1a1510;
+    --surface: #231d16;
+    --surface2:#2c2419;
+    --border:  #3a3028;
+    --text:    #e0d4bf;
+    --fg:      #e0d4bf;
+    --dim:     #ab9c82;
+    --muted:   #877a62;
+    --accent:  #bd7733;  /* bronze */
+    --rust:    #bd7733;
+    --tan:     #d8b784;
+    --sand:    #e0d4bf;  /* light text on dark surfaces */
+    --dusk:    #2c2419;  /* dark surface for headers/chips */
+    --sage:    #7f8f4a;  /* olive */
+    --sky:     #5f93a0;  /* denim-slate */
+    --mono:    'JetBrains Mono', monospace;
+    --serif:   'Fraunces', Georgia, serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Atkinson Hyperlegible', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
+  header { background: var(--surface2); color: var(--tan); padding: 0.85rem 1.2rem; display: flex; align-items: center; gap: 0.8rem; border-bottom: 2px solid var(--border); }
+  header h1 { font-family: var(--serif); font-size: 1.25rem; font-weight: 600; }
+  header .badge { font-size: 0.65rem; background: var(--accent); color: #1a1510; padding: 0.15rem 0.45rem; border-radius: 3px; font-family: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
+  main { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem; }
+  section { margin-bottom: 1.8rem; }
+  h2 { font-family: var(--mono); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 0.9rem; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 1rem 1.2rem; }
+  label { display: block; font-size: 0.8rem; color: var(--dim); margin-bottom: 0.25rem; }
+  input[type=text], input[type=number] { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.7rem; font-family: var(--mono); font-size: 1rem; background: var(--surface2); color: var(--text); margin-bottom: 0.8rem; }
+  button { background: var(--accent); color: #1a1510; border: none; padding: 0.5rem 1.1rem; border-radius: 4px; font-family: inherit; font-weight: 700; font-size: 0.9rem; cursor: pointer; }
+  button:hover { background: #a5651f; }
+  button:disabled { background: #4a4034; color: #877a62; cursor: default; }
+  button.secondary { background: var(--sage); color: #12160a; }
+  #msg { padding: 0.45rem 0.9rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.84rem; display: none; }
+  #msg.ok  { background: #26301a; color: #acc87a; display: block; border: 1px solid #3c4a26; }
+  #msg.err { background: #351d18; color: #d99079; display: block; border: 1px solid #5a3128; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+  th { background: var(--surface2); color: var(--tan); text-align: left; padding: 0.4rem 0.6rem; font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .tag { display: inline-block; padding: 0.12rem 0.4rem; border-radius: 3px; font-size: 0.68rem; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.04em; }
+  .tag-elite      { background: #3a2c10; color: #e8b84a; border: 1px solid #6a521c; }
+  .tag-premium    { background: #2c2440; color: #b39ad8; border: 1px solid #4a3f6a; }
+  .tag-mid        { background: #16303a; color: #7fbdd0; border: 1px solid #2c5560; }
+  .tag-commercial { background: #2a2620; color: #b0a48c; border: 1px solid #443c30; }
+  .phase-chip { display: inline-block; padding: 0.18rem 0.65rem; border-radius: 12px; font-size: 0.72rem; background: var(--bg); color: var(--tan); font-family: var(--mono); border: 1px solid var(--border); margin-left: auto; }
+  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
+  .stat-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem 0.8rem; }
+  .stat-label { font-size: 0.68rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-val { font-size: 1.15rem; font-weight: 700; color: var(--accent); font-family: var(--mono); }
+  .epd-bar-wrap { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; font-family: var(--mono); }
+  .epd-bar { height: 7px; border-radius: 3px; background: var(--sky); min-width: 2px; }
+  .range-note { font-size: 0.75rem; color: var(--dim); margin-top: 0.25rem; font-family: var(--mono); }
+  .bid-row { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.4rem; }
+  .bid-row input { width: 130px; margin-bottom: 0; }
+  .submitted { color: var(--sage); font-size: 0.8rem; }
+  .lb-bar { display: inline-block; height: 7px; background: var(--accent); border-radius: 3px; min-width: 2px; }
+  /* Board meeting */
+  .board-banner { border-radius: 5px; padding: 0.75rem 0.95rem; margin-bottom: 1rem; color: #fff; font-size: 0.9rem; line-height: 1.4; }
+  .board-banner .yr { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.9; display: block; margin-bottom: 0.2rem; }
+  .board-top { display: grid; grid-template-columns: 168px 1fr; gap: 1rem; align-items: start; margin-bottom: 1rem; }
+  @media (max-width: 520px) { .board-top { grid-template-columns: 1fr; } }
+  .mini-map { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 0.3rem; }
+  .mini-map svg { width: 100%; height: auto; display: block; }
+  .map-legend { font-size: 0.68rem; color: var(--dim); margin-top: 0.25rem; text-align: center; font-family: var(--mono); }
+  .mandate { font-size: 0.82rem; color: var(--text); background: var(--surface2); border-left: 3px solid var(--accent); padding: 0.5rem 0.7rem; border-radius: 0 4px 4px 0; margin-bottom: 0.7rem; }
+  .kpi-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; margin-bottom: 0.3rem; font-family: var(--mono); }
+  .kpi-row .kpi-name { width: 96px; color: var(--dim); flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
+  .kpi-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+  .kpi-fill { height: 100%; background: var(--sage); border-radius: 4px; }
+  .kpi-fill.pri { background: var(--accent); }
+  .dec-block { margin-bottom: 1.1rem; }
+  .dec-head { font-family: var(--serif); font-weight: 600; font-size: 1rem; color: var(--text); margin-bottom: 0.15rem; }
+  .dec-sub { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.5rem; }
+  .opt-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+  .opt { flex: 1; min-width: 120px; border: 1.5px solid var(--border); border-radius: 5px; background: var(--surface2); padding: 0.5rem 0.6rem; cursor: pointer; text-align: left; transition: border-color .12s, background .12s; }
+  .opt:hover { border-color: var(--accent); }
+  .opt.on { border-color: var(--accent); background: #2f2513; box-shadow: 0 0 0 1px var(--accent) inset; }
+  .opt .opt-t { font-weight: 700; font-size: 0.84rem; color: var(--text); }
+  .opt .opt-d { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; line-height: 1.3; font-family: var(--mono); }
+  .consequence { position: sticky; bottom: 0; background: var(--surface2); color: var(--sand); border: 1px solid var(--border); border-radius: 5px; padding: 0.75rem 0.95rem; font-size: 0.84rem; margin-top: 0.5rem; }
+  .consequence b { color: var(--tan); font-family: var(--mono); }
+  .fit-note { font-size: 0.78rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--border); color: var(--dim); }
+  .techpill.on { background: var(--accent) !important; color: #1a1510 !important; border-color: var(--accent) !important; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ranch Strategy Game</h1>
+  <span class="badge">Team</span>
+  <span id="phaseChip" class="phase-chip">lobby</span>
+</header>
+<main>
+  <div id="msg"></div>
+
+  <!-- Join form -->
+  <section id="secJoin">
+    <h2>Join Game</h2>
+    <div class="card">
+      <label>Join Code (5 letters)</label>
+      <input type="text" id="inCode" maxlength="6" placeholder="ABCDE" oninput="this.value=this.value.toUpperCase()">
+      <label>Team Name</label>
+      <input type="text" id="inName" maxlength="40" placeholder="e.g. Rafter 9 Ranch">
+      <button onclick="joinGame()">Join</button>
+    </div>
+  </section>
+
+  <!-- Lobby wait -->
+  <section id="secLobbyWait" style="display:none">
+    <h2>Lobby</h2>
+    <div class="card">
+      <p>You are in the lobby. Waiting for the instructor to start the game.</p>
+      <p style="margin-top:0.6rem;font-size:0.85rem;color:var(--muted)">Your archetype will be revealed when the market opens.</p>
+      <div id="lobbyTeamList" style="margin-top:0.8rem;font-size:0.85rem;color:var(--muted)"></div>
+    </div>
+  </section>
+
+  <!-- My Ranch Stats -->
+  <section id="secStats" style="display:none">
+    <h2>My Ranch <span id="statArchLabel" style="font-size:0.8rem;color:var(--muted);text-transform:none;letter-spacing:0"></span></h2>
+    <div class="stat-grid" id="statGrid">
+      <div class="stat-box"><div class="stat-label">Cash</div><div class="stat-val" id="statCash">--</div></div>
+      <div class="stat-box"><div class="stat-label">Herd</div><div class="stat-val" id="statHerd">--</div></div>
+      <div class="stat-box"><div class="stat-label">County</div><div class="stat-val" id="statCounty" style="font-size:0.9rem">--</div></div>
+      <div class="stat-box"><div class="stat-label">Reputation</div><div class="stat-val" id="statRep">--</div></div>
+    </div>
+  </section>
+
+  <!-- Board Meeting: set operations for the year -->
+  <section id="secBoard" style="display:none">
+    <h2>Board Meeting <span id="boardYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <div class="card">
+      <div id="boardBanner" class="board-banner"></div>
+      <div class="board-top">
+        <div>
+          <div class="mini-map" id="boardMap"></div>
+          <div class="map-legend" id="boardMapLegend"></div>
+        </div>
+        <div>
+          <div class="mandate" id="boardMandate"></div>
+          <div id="boardKpis"></div>
+        </div>
+      </div>
+
+      <div class="dec-block">
+        <div class="dec-head">Herd</div>
+        <div class="dec-sub">Irreversible for the year. Cows bought now cannot be un-bought before the shock hits.</div>
+        <div class="opt-row" id="optHerd"></div>
+      </div>
+      <div class="dec-block">
+        <div class="dec-head">Debt</div>
+        <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
+        <div class="opt-row" id="optDebt"></div>
+      </div>
+      <div class="dec-block">
+        <div class="dec-head">Technology</div>
+        <div class="dec-sub">Adopt at most one. Fit is how well it suits your county.</div>
+        <div id="techPills"></div>
+      </div>
+
+      <div class="consequence" id="boardConsequence"></div>
+      <div class="row" style="margin-top:0.8rem">
+        <button id="btnSubmitBoard" onclick="submitBoard()">Lock In Operations</button>
+        <span class="status" id="boardMsg">You can revise until the instructor opens the auction.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Market: pick a ranch -->
+  <section id="secMarket" style="display:none">
+    <h2>Ranch Market</h2>
+    <div class="card">
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.8rem">
+        Your secret objective is the <strong><span id="archetypeLabel">--</span></strong> strategy.
+        Click a ranch on the map or in the list. The one you buy is your endowment for the game.
+      </p>
+      <div class="mini-map" id="marketMap" style="margin-bottom:0.9rem"></div>
+      <table id="tblMarket">
+        <thead><tr><th>County</th><th>Region</th><th>Herd</th><th>Ask</th><th>Action</th></tr></thead>
+        <tbody id="tbodyMarket"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Auction: submit bids -->
+  <section id="secAuction" style="display:none">
+    <h2>Sealed-Bid Auction <span id="auctionYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <div class="card">
+      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:0.7rem">
+        Submit a max bid per bull. Bids are sealed until the instructor resolves, and you
+        can revise a bid until then. You win each bull you top, up to your herd sire slots,
+        so bid where the traits fit your herd and your objective.
+      </p>
+      <div id="auctionHerd" style="margin-bottom:0.9rem"></div>
+      <div id="bullCards"></div>
+      <!-- sticky exposure HUD: stays pinned to the viewport bottom while scrolling lots -->
+      <div id="auctionExposure" class="consequence"></div>
+      <p style="font-size:0.62rem;color:var(--muted);margin-top:0.8rem;font-family:var(--mono)">
+        Bull photos are representative stock images, not the specific lots. Sources: USDA (public domain) and
+        Wikimedia Commons contributors under CC BY / CC BY-SA. Full attribution in assets/bulls/LICENSE.md.
+      </p>
+    </div>
+  </section>
+
+  <!-- Won this year -->
+  <section id="secWon" style="display:none">
+    <h2>Auction Results</h2>
+    <div class="card" id="cardWon">Waiting for resolution.</div>
+  </section>
+
+  <!-- Standings -->
+  <section id="secStandings" style="display:none">
+    <h2>Standings</h2>
+    <div class="card">
+      <table id="tblStandings">
+        <thead><tr><th>Rank</th><th>Team</th><th>Cash</th><th>Bar</th></tr></thead>
+        <tbody id="tbodyStandings"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="bull-catalog.js?v=1"></script>
+<script src="engine.js"></script>
+<!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
+<script src="assets/bulls/manifest.js?v=2"></script>
+<script src="county-geo.js?v=2"></script>
+<script>
+'use strict';
+
+const supa = supabase.createClient(window.SUPA_URL, window.SUPA_ANON_KEY);
+
+let GAME_ID   = null;
+let TEAM_ID   = null;
+let TEAM_NAME = null;
+let ARCHETYPE = null;
+let CUR_YEAR  = 0;
+let PHASE     = 'lobby';
+let myRanchId = null;  // ranch id once purchased
+let submittedBids = {};  // bull_id -> true
+
+const POLL_MS = 4000;
+
+function msg(text, type) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = type;
+}
+
+function setPhaseChip(phase) {
+  document.getElementById('phaseChip').textContent = phase;
+}
+
+// ---- Join game ----
+async function joinGame() {
+  const code = document.getElementById('inCode').value.trim().toUpperCase();
+  const name = document.getElementById('inName').value.trim();
+  if (!code || code.length < 5) { msg('Enter a 5-letter join code.', 'err'); return; }
+  if (!name) { msg('Enter a team name.', 'err'); return; }
+
+  // Lookup game by code
+  const { data: game, error: gErr } = await supa.from('games').select('*').eq('join_code', code).maybeSingle();
+  if (gErr || !game) { msg('Game not found. Check your join code.', 'err'); return; }
+  if (game.phase !== 'lobby') { msg('This game has already started.', 'err'); return; }
+
+  GAME_ID = game.id;
+
+  // Pick a random available (non-probe) archetype not yet claimed
+  const { data: existingTeams } = await supa.from('teams').select('archetype').eq('game_id', GAME_ID);
+  const usedArch = (existingTeams || []).map(t => t.archetype);
+  const available = Object.keys(RanchEngine.ARCHETYPES).filter(k =>
+    !RanchEngine.ARCHETYPES[k].probe && !usedArch.includes(k));
+  if (!available.length) { msg('No archetype slots remaining in this game.', 'err'); return; }
+  ARCHETYPE = available[Math.floor(Math.random() * available.length)];
+
+  const { data: team, error: tErr } = await supa.from('teams').insert({
+    game_id: GAME_ID, name, archetype: ARCHETYPE, state: null, is_ai: false,
+  }).select().single();
+  if (tErr) { msg('Could not join: ' + tErr.message, 'err'); return; }
+
+  TEAM_ID   = team.id;
+  TEAM_NAME = name;
+
+  // Log join
+  await logDecision('team_joined', { archetype: ARCHETYPE });
+
+  document.getElementById('secJoin').style.display = 'none';
+  document.getElementById('secLobbyWait').style.display = '';
+  msg('Joined! Waiting for the instructor to start the market.', 'ok');
+
+  subscribeToGame();
+  startPolling();
+}
+
+// ---- Realtime: watch game phase ----
+function subscribeToGame() {
+  supa.channel('game-phase-' + GAME_ID)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'games', filter: 'id=eq.' + GAME_ID }, payload => {
+      handlePhaseChange(payload.new);
+    }).subscribe();
+}
+
+async function handlePhaseChange(game) {
+  PHASE    = game.phase;
+  CUR_YEAR = game.year;
+  setPhaseChip(PHASE);
+
+  if (PHASE === 'market') {
+    document.getElementById('secLobbyWait').style.display = 'none';
+    document.getElementById('archetypeLabel').textContent = RanchEngine.ARCHETYPES[ARCHETYPE]?.label || ARCHETYPE;
+    document.getElementById('secMarket').style.display = '';
+    await refreshMarket();
+    await refreshMyStats();
+  } else if (PHASE === 'board') {
+    document.getElementById('secMarket').style.display = 'none';
+    document.getElementById('secAuction').style.display = 'none';
+    document.getElementById('secWon').style.display = 'none';
+    document.getElementById('secStats').style.display = '';
+    document.getElementById('secBoard').style.display = '';
+    document.getElementById('boardYearLabel').textContent = 'Year ' + CUR_YEAR;
+    await refreshBoard(game.world);
+    await refreshMyStats();
+  } else if (PHASE === 'auction') {
+    document.getElementById('secBoard').style.display = 'none';
+    document.getElementById('secMarket').style.display = 'none';
+    document.getElementById('secStats').style.display = '';
+    document.getElementById('secAuction').style.display = '';
+    document.getElementById('auctionYearLabel').textContent = 'Year ' + CUR_YEAR;
+    submittedBids = {};
+    await refreshAuction(game.world);
+    await refreshMyStats();
+  } else if (PHASE === 'resolve') {
+    // clearly switch off the auction/board view so the player sees the outcome
+    document.getElementById('secBoard').style.display = 'none';
+    document.getElementById('secAuction').style.display = 'none';
+    document.getElementById('secMarket').style.display = 'none';
+    document.getElementById('secStats').style.display = '';
+    await showResults(game.world);
+    await refreshMyStats();
+    await refreshStandings();
+    window.scrollTo(0, 0);
+  } else if (PHASE === 'ended') {
+    document.getElementById('secAuction').style.display = 'none';
+    document.getElementById('secBoard').style.display = 'none';
+    await showResults(game.world);
+    await refreshStandings();
+    setPhaseChip('ended');
+  }
+}
+
+// ---- Market ----
+async function refreshMarket() {
+  const { data: ranches } = await supa.from('ranches').select('*').eq('game_id', GAME_ID).is('bought_by', null);
+  renderMarket(ranches || []);
+}
+
+let marketRanches = [];
+function renderMarket(ranches) {
+  marketRanches = ranches || [];
+  // clickable map of the available counties (Steven: see the map when picking a ranch)
+  const availSet = new Set(marketRanches.map(r => r.county));
+  document.getElementById('marketMap').innerHTML = buildGeoMap({ available: availSet, W: 512, H: 300 });
+  const tbody = document.getElementById('tbodyMarket');
+  tbody.innerHTML = '';
+  if (!marketRanches.length) {
+    tbody.innerHTML = '<tr><td colspan="5"><em>No ranches available. You may have already purchased one.</em></td></tr>';
+    return;
+  }
+  marketRanches.forEach(r => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td>${esc(r.county)}</td><td>${esc(r.region)}</td>` +
+      `<td>${r.herd.toLocaleString()} hd</td>` +
+      `<td>$${r.ask.toLocaleString()}</td>` +
+      `<td><button onclick="buyRanch('${r.id}','${r.county}',${r.ask})">Buy</button></td>`;
+    tbody.appendChild(tr);
+  });
+}
+// clicking a county on the market map buys that listing (same path as the table button)
+function pickRanchByCounty(county) {
+  const r = marketRanches.find(x => x.county === county);
+  if (r) buyRanch(r.id, r.county, r.ask);
+}
+
+async function buyRanch(ranchId, county, ask) {
+  if (!confirm('Buy ' + county + ' for $' + Number(ask).toLocaleString() + '?')) return;
+
+  // Mark ranch bought
+  const { error: rErr } = await supa.from('ranches').update({ bought_by: TEAM_ID }).eq('id', ranchId).is('bought_by', null);
+  if (rErr) { msg('Could not purchase: ' + rErr.message, 'err'); return; }
+
+  // Build initial ranch state from engine
+  const { data: ranchRow } = await supa.from('ranches').select('*').eq('id', ranchId).single();
+  const ranchState = RanchEngine.makeRanch(ARCHETYPE, {
+    county: ranchRow.county, region: ranchRow.region,
+    herd: ranchRow.herd, ask: ranchRow.ask, landCap: ranchRow.land_cap,
+  });
+  // baseline anchors (playGame sets these; the multiplayer must too, or the cash KPI and
+  // the drawdown/resilience scoring have no reference point and never move)
+  const w0 = RanchEngine.newWorld();
+  ranchState.cash0 = ranchState.cash;
+  ranchState.eq0 = RanchEngine.equity(ranchState, w0);
+  ranchState.peakEquity = ranchState.eq0 - ranchState.cash0;
+  await supa.from('teams').update({ state: JSON.parse(JSON.stringify(ranchState, setReplacer)) }).eq('id', TEAM_ID);
+  myRanchId = ranchId;
+
+  await logDecision('ranch_purchase', { ranch_id: ranchId, county, ask });
+
+  document.getElementById('secMarket').style.display = 'none';
+  await refreshMyStats();
+  msg('Ranch purchased. Waiting for auction.', 'ok');
+}
+
+// ---- My stats ----
+async function refreshMyStats() {
+  const { data: team } = await supa.from('teams').select('*').eq('id', TEAM_ID).single();
+  if (!team || !team.state) return;
+  const st = reviveState(team.state);
+  const archInfo = RanchEngine.ARCHETYPES[ARCHETYPE];
+
+  document.getElementById('statArchLabel').textContent = '(' + (archInfo?.label || ARCHETYPE) + ')';
+  document.getElementById('statCash').textContent = '$' + Math.round(st.cash).toLocaleString();
+  document.getElementById('statHerd').textContent = st.herd.toLocaleString() + ' hd';
+  document.getElementById('statCounty').textContent = st.county || '--';
+  document.getElementById('statRep').textContent = (st.rep || 0).toFixed(0);
+  document.getElementById('secStats').style.display = '';
+}
+
+// ---- Board Meeting ----
+const TECH_LABEL = { water: 'Water infrastructure', vfence: 'Virtual fence', dogs: 'Stock dogs', drone: 'Drones', genomic: 'Genomic testing' };
+const KPI_NAME = { cash: 'cash growth', herdGrowth: 'herd growth', genetics: 'genetics', rep: 'reputation', costEff: 'cost efficiency', resilience: 'durability through shocks', lowDebt: 'a low-debt balance sheet', premium: 'brand premium' };
+const SHOCK_WORD = { calm: 'calm markets', export_boom: 'an export boom lifting feeder prices', market_soft: 'a soft market', rate_hike: 'an interest rate hike (borrowing costs 13%)', cheap_feed: 'cheap feed', tariff: 'a tariff shock on branded beef', processor: 'a new processor opening nearby' };
+// western state outlines + label positions, shared coordinate space with county pins (viewBox 512x400)
+const ST_PATHS = {
+  OR: 'M 28,85 L 168,85 L 170,172 L 148,192 L 28,192 Z',
+  ID: 'M 168,85 L 260,85 L 260,130 L 234,130 L 230,278 L 170,278 L 168,172 Z',
+  MT: 'M 168,42 L 458,42 L 458,128 L 260,128 L 260,85 L 168,85 Z',
+  WY: 'M 260,128 L 458,128 L 458,248 L 260,248 Z',
+  CO: 'M 260,248 L 486,248 L 486,348 L 260,348 Z',
+  NV: 'M 28,192 L 148,192 L 168,278 L 168,388 L 28,388 Z',
+  UT: 'M 168,278 L 260,278 L 260,388 L 224,388 L 224,348 L 168,348 Z',
+};
+const ST_LBL = { OR: { x: 90, y: 140 }, ID: { x: 210, y: 190 }, MT: { x: 312, y: 88 }, WY: { x: 358, y: 192 }, CO: { x: 374, y: 298 }, NV: { x: 96, y: 292 }, UT: { x: 212, y: 336 } };
+
+let boardChoice = { herd: 'hold', debt: 'hold', techs: [] };
+let boardBaseSt = null, boardWorld = null;
+
+function boardKey() { return 'board_' + GAME_ID + '_' + TEAM_ID + '_' + CUR_YEAR; }
+function droughtColor(sev) { return sev >= 1.0 ? '#9b3a1a' : sev >= 0.5 ? '#c98a2b' : '#6b7c5c'; }
+
+// translate the chosen option modes into the raw numbers the engine understands
+function herdDelta(st, w, mode) {
+  const h = st.herd;
+  if (mode === 'destock') return -Math.round(h * 0.15);
+  if (mode === 'grow') return Math.round(h * 0.15);
+  if (mode === 'push') return Math.round(h * 0.35);
+  return 0;
+}
+function debtDelta(st, w, mode) {
+  if (mode === 'pay') return -Math.min(st.debt, Math.max(0, st.cash - 40000));
+  if (mode === 'borrow') { const room = st.a.debtCap * Math.max(0, RanchEngine.equity(st, w)) - st.debt; return Math.max(0, Math.round(room * 0.5)); }
+  return 0;
+}
+// the one place decisions hit state, shared by the live preview and the real submit.
+// Voluntary borrowing and tech honor the year-gated unlocks (the locked UI never sends
+// them, but the guard keeps a stale client honest); distress borrowing is exempt.
+function applyDecisions(r, w, expandCows, debtAction, techChoices) {
+  if (debtAction > 0 && (w.year || CUR_YEAR) < RanchEngine.UNLOCKS.debt) debtAction = 0;
+  if ((w.year || CUR_YEAR) < RanchEngine.UNLOCKS.tech) techChoices = [];
+  if (r.cash < 0 && r.a.debtCap > 0) { const room = r.a.debtCap * Math.max(0, RanchEngine.equity(r, w)) - r.debt; const draw = Math.min(-r.cash, Math.max(0, room)); if (draw > 0) { r.debt += draw; r.cash += draw; } }
+  if (r.cash < 0) { const sell = Math.min(Math.max(0, r.herd - 100), Math.ceil(-r.cash / (1200 * w.feederIdx))); if (sell > 0) { r.herd -= sell; r.cash += sell * 1150 * w.feederIdx; r.rep -= 2; } }
+  if (expandCows > 0) { const cp = 1675 * w.feederIdx; const mx = Math.min(expandCows, r.landCap - r.herd, Math.round(r.herd * 0.35), Math.floor(r.cash / cp)); if (mx > 0) { r.herd += mx; r.cash -= mx * cp; } }
+  if (expandCows < 0) { const sell = Math.min(Math.abs(expandCows), Math.max(0, r.herd - 100)); if (sell > 0) { r.herd -= sell; r.cash += sell * (RanchEngine.droughtSeverity(w, r.region) > 0 ? 1500 : 1400) * w.feederIdx; } }
+  if (debtAction > 0) { const amt = Math.min(debtAction, r.a.debtCap * Math.max(0, RanchEngine.equity(r, w)) - r.debt); if (amt > 0) { r.debt += amt; r.cash += amt; } }
+  if (debtAction < 0) { const pay = Math.min(Math.abs(debtAction), r.debt, Math.max(0, r.cash - 40000)); if (pay > 0) { r.debt -= pay; r.cash -= pay; } }
+  // adopt every chosen tech you can still afford, in the order selected (cheapest-first is
+  // handled by the player); each one you cannot afford is simply skipped
+  for (const t of (techChoices || [])) {
+    if (!r.tech.has(t) && r.cash >= RanchEngine.TECHS[t].capex) { r.tech.add(t); r.cash -= RanchEngine.TECHS[t].capex; }
+  }
+  return r;
+}
+function choiceNumbers() {
+  return {
+    expandCows: herdDelta(boardBaseSt, boardWorld, boardChoice.herd),
+    debtAction: debtDelta(boardBaseSt, boardWorld, boardChoice.debt),
+    techChoices: boardChoice.techs,
+  };
+}
+
+async function refreshBoard(world) {
+  const { data: team } = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
+  if (!team || !team.state) return;
+  // Snapshot the pre-decision state once per year so revising re-applies from a fixed base.
+  let baseRaw = localStorage.getItem(boardKey());
+  if (!baseRaw) { baseRaw = JSON.stringify(team.state); localStorage.setItem(boardKey(), baseRaw); }
+  boardBaseSt = reviveState(JSON.parse(baseRaw));
+  boardWorld = world || RanchEngine.newWorld();
+  boardChoice = { herd: 'hold', debt: 'hold', techs: [] };
+  const st = boardBaseSt, w = boardWorld, reg = RanchEngine.REGIONS[st.region];
+  const sev = RanchEngine.droughtSeverity(w, st.region);
+
+  // Situation banner (Frostpunk directional framing, colored by drought severity)
+  const droughtWord = { mild: 'dry but manageable', moderate: 'moderate drought', severe: 'severe drought' }[w.drought] || w.drought;
+  document.getElementById('boardBanner').style.background = droughtColor(sev);
+  document.getElementById('boardBanner').innerHTML =
+    `<span class="yr">Year ${CUR_YEAR} board meeting</span>` +
+    `Your board meets under ${droughtWord} at ${esc(st.county)}, and ${SHOCK_WORD[w.shock] || w.shock}. ` +
+    `The feeder index sits at ${(w.feederIdx || 1).toFixed(2)}, the signal that pulls bull prices with it.`;
+
+  renderBoardMap(st, w, sev);
+
+  // Mandate (keep the archetype in front of the player every year)
+  const arch = RanchEngine.ARCHETYPES[ARCHETYPE];
+  const topKpis = Object.entries(arch.kpi).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => KPI_NAME[k] || k);
+  document.getElementById('boardMandate').innerHTML =
+    `You run the <strong>${arch.label}</strong>. Your investors are scored on <strong>${topKpis.join('</strong> and <strong>')}</strong>.`;
+
+  // Where you stand: real bars with the live VALUE shown so change is visible year to year
+  const gAvg = RanchEngine.avg(RanchEngine.TRAITS.map(t => st.g[t]));
+  const cash0 = st.cash0 || st.cash || 1, herd0 = st.herd0 || st.herd;
+  const bars = [
+    { key: 'genetics', name: 'Genetics', pct: RanchEngine.clamp(gAvg / 8, 0, 1), val: gAvg.toFixed(1) },
+    { key: 'herdGrowth', name: 'Herd', pct: RanchEngine.clamp(st.herd / herd0, 0.4, 1.6) / 1.6, val: st.herd.toLocaleString() + ' (' + (st.herd >= herd0 ? '+' : '') + Math.round((st.herd / herd0 - 1) * 100) + '%)' },
+    { key: 'cash', name: 'Cash', pct: RanchEngine.clamp(st.cash / cash0, 0, 1.3) / 1.3, val: '$' + (st.cash / 1e6).toFixed(2) + 'M (' + (st.cash >= cash0 ? '+' : '') + Math.round((st.cash / cash0 - 1) * 100) + '%)' },
+  ];
+  document.getElementById('boardKpis').innerHTML = bars.map(b =>
+    `<div class="kpi-row"><span class="kpi-name">${b.name}</span>` +
+    `<span class="kpi-track"><span class="kpi-fill ${arch.kpi[b.key] ? 'pri' : ''}" style="width:${Math.round(b.pct * 100)}%"></span></span>` +
+    `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`
+  ).join('');
+
+  renderHerdOptions(); renderDebtOptions(); renderTechOptions();
+  updateConsequence();
+}
+
+// ---- Real geographic map (projected from window.RANCH_GEO; falls back to the crude
+// state boxes if county-geo.js is missing) ----
+function geoName(n) { return (n || '').replace(' County', ''); }
+function makeGeoProj(geo, W, H, pad) {
+  let minx = 180, miny = 90, maxx = -180, maxy = -90;
+  const walk = a => { if (typeof a[0] === 'number') { minx = Math.min(minx, a[0]); maxx = Math.max(maxx, a[0]); miny = Math.min(miny, a[1]); maxy = Math.max(maxy, a[1]); } else a.forEach(walk); };
+  geo.states.features.forEach(f => walk(f.geometry.coordinates));
+  const midLat = (miny + maxy) / 2, k = Math.cos(midLat * Math.PI / 180);
+  const gw = (maxx - minx) * k, gh = (maxy - miny);
+  const s = Math.min((W - 2 * pad) / gw, (H - 2 * pad) / gh);
+  const ox = pad + ((W - 2 * pad) - gw * s) / 2, oy = pad + ((H - 2 * pad) - gh * s) / 2;
+  return { x: lon => ox + (lon - minx) * k * s, y: lat => oy + (maxy - lat) * s };
+}
+function geomPaths(geometry, proj) {
+  const polys = geometry.type === 'MultiPolygon' ? geometry.coordinates : [geometry.coordinates];
+  return polys.map(rings => rings.map(ring =>
+    'M' + ring.map(pt => proj.x(pt[0]).toFixed(1) + ',' + proj.y(pt[1]).toFixed(1)).join('L') + 'Z'
+  ).join(' '));
+}
+function geomCentroid(geometry, proj) {
+  const ring = (geometry.type === 'MultiPolygon' ? geometry.coordinates[0] : geometry.coordinates)[0];
+  let sx = 0, sy = 0; ring.forEach(pt => { sx += proj.x(pt[0]); sy += proj.y(pt[1]); });
+  return { x: sx / ring.length, y: sy / ring.length };
+}
+// opts: { highlight: countyName, highlightColor, clickable, dimTaken:Set(countyNames), W, H }
+function buildGeoMap(opts) {
+  const geo = (typeof window !== 'undefined' && window.RANCH_GEO) || null;
+  const W = opts.W || 512, H = opts.H || 340;
+  if (!geo) { // fallback: crude state boxes
+    let s = `<svg viewBox="0 0 512 400" xmlns="http://www.w3.org/2000/svg">`;
+    for (const st in ST_PATHS) s += `<path d="${ST_PATHS[st]}" fill="#2c2419" stroke="#4a4034" stroke-width="1.2"/>`;
+    return s + '</svg>';
+  }
+  const proj = makeGeoProj(geo, W, H, 8);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
+  geo.states.features.forEach(f => geomPaths(f.geometry, proj).forEach(d =>
+    svg += `<path d="${d}" fill="#241e17" stroke="#4a4034" stroke-width="1"/>`));
+  geo.counties.features.forEach(f => {
+    const name = geoName(f.properties.name);
+    const isHi = opts.highlight && name === opts.highlight;
+    const avail = opts.available ? opts.available.has(name) : false;
+    const dim = opts.available && !avail;
+    const fill = isHi ? (opts.highlightColor || '#bd7733') : dim ? '#241f18' : avail ? '#4a3a22' : '#3a3226';
+    const click = avail ? ` onclick="pickRanchByCounty('${name.replace(/'/g, '')}')" style="cursor:pointer"` : '';
+    geomPaths(f.geometry, proj).forEach(d =>
+      svg += `<path d="${d}" fill="${fill}" stroke="${isHi ? '#f0dcc8' : '#5a4c38'}" stroke-width="${isHi ? 1.6 : 0.8}"${click}/>`);
+    if (avail || isHi) {
+      const c = geomCentroid(f.geometry, proj);
+      svg += `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.5" fill="#bd7733" pointer-events="none"/>`;
+      svg += `<text x="${c.x.toFixed(1)}" y="${(c.y - 7).toFixed(1)}" fill="#e0d4bf" font-size="10" font-family="monospace" text-anchor="middle" pointer-events="none">${esc(name.split(',')[0])}</text>`;
+    }
+  });
+  return svg + '</svg>';
+}
+
+function renderBoardMap(st, w, sev) {
+  document.getElementById('boardMap').innerHTML = buildGeoMap({ highlight: st.county, highlightColor: droughtColor(sev) });
+  const word = sev >= 1.0 ? 'severe' : sev >= 0.5 ? 'moderate' : 'mild';
+  document.getElementById('boardMapLegend').innerHTML =
+    `<span style="color:${droughtColor(sev)};font-weight:bold">&#9679;</span> ${esc((st.county || '').split(',')[0])}: ${word} drought (exposure ${RanchEngine.REGIONS[st.region].droughtExposure}x)`;
+}
+
+function optCard(group, mode, title, desc, on) {
+  return `<button type="button" class="opt${on ? ' on' : ''}" onclick="setChoice('${group}','${mode}')">` +
+    `<div class="opt-t">${title}</div><div class="opt-d">${desc}</div></button>`;
+}
+function renderHerdOptions() {
+  const st = boardBaseSt, w = boardWorld;
+  const cp = 1675 * w.feederIdx;
+  const sellP = (RanchEngine.droughtSeverity(w, st.region) > 0 ? 1500 : 1400) * w.feederIdx;
+  const opt = (mode) => {
+    const d = herdDelta(st, w, mode);
+    if (mode === 'hold') return optCard('herd', 'hold', 'Hold', 'Keep ' + st.herd.toLocaleString() + ' head. No cash moved.', boardChoice.herd === mode);
+    if (mode === 'destock') { const s = Math.min(-d, Math.max(0, st.herd - 100)); return optCard('herd', 'destock', 'Destock', 'Sell ~' + s.toLocaleString() + ' head, raise ~$' + Math.round(s * sellP).toLocaleString() + '.', boardChoice.herd === mode); }
+    // d is the TARGET (15% grow / 35% push, uncapped). The label always names the target
+    // so Grow and Push stay distinct even when cash or land caps the actual buy to the same.
+    const target = d;
+    const buy = Math.min(target, st.landCap - st.herd, Math.round(st.herd * 0.35), Math.floor(st.cash / cp));
+    const lbl = mode === 'grow' ? 'Grow (+15%)' : 'Push (+35%)';
+    let desc;
+    if (target <= 0) desc = 'Already at capacity.';
+    else if (buy <= 0) desc = 'Target +' + target.toLocaleString() + ' head, but no cash or land for it now.';
+    else if (buy < target) desc = 'Target +' + target.toLocaleString() + ' head; cash covers ~' + buy.toLocaleString() + ' (~$' + Math.round(buy * cp).toLocaleString() + ').';
+    else desc = 'Buy ~' + buy.toLocaleString() + ' head, spend ~$' + Math.round(buy * cp).toLocaleString() + '.';
+    return optCard('herd', mode, lbl, desc, boardChoice.herd === mode);
+  };
+  document.getElementById('optHerd').innerHTML = opt('destock') + opt('hold') + opt('grow') + opt('push');
+}
+function lockedNote(text) {
+  return `<div style="border:1px dashed var(--border);border-radius:5px;padding:0.55rem 0.8rem;` +
+    `color:var(--muted);font-size:0.8rem;background:var(--bg)">` +
+    `<span style="font-family:var(--mono);color:var(--dim)">LOCKED</span> ${text}</div>`;
+}
+function renderDebtOptions() {
+  const st = boardBaseSt, w = boardWorld;
+  // year-gated credit line: before it opens the only debt move is paying down what
+  // distress borrowing may have forced on you
+  if (CUR_YEAR < RanchEngine.UNLOCKS.debt) {
+    let html = lockedNote('The credit line opens in year ' + RanchEngine.UNLOCKS.debt +
+      '. The bank wants ' + (RanchEngine.UNLOCKS.debt - 1) + ' seasons of operating history before it lends.');
+    if (st.debt > 0) { const pay = Math.min(st.debt, Math.max(0, st.cash - 40000)); html += '<div class="opt-row" style="margin-top:0.45rem">' + optCard('debt', 'pay', 'Pay down', 'Retire ~$' + Math.round(pay).toLocaleString() + ' of the distress note.', boardChoice.debt === 'pay') + optCard('debt', 'hold', 'Hold', 'No change to $' + Math.round(st.debt).toLocaleString() + ' debt.', boardChoice.debt === 'hold') + '</div>'; }
+    document.getElementById('optDebt').innerHTML = html;
+    return;
+  }
+  const room = st.a.debtCap * Math.max(0, RanchEngine.equity(st, w)) - st.debt;
+  let html = '';
+  if (st.debt > 0) { const pay = Math.min(st.debt, Math.max(0, st.cash - 40000)); html += optCard('debt', 'pay', 'Pay down', 'Retire ~$' + Math.round(pay).toLocaleString() + ' of debt.', boardChoice.debt === 'pay'); }
+  html += optCard('debt', 'hold', 'Hold', 'No change to $' + Math.round(st.debt).toLocaleString() + ' debt.', boardChoice.debt === 'hold');
+  if (st.a.debtCap > 0 && room > 1000) { html += optCard('debt', 'borrow', 'Borrow', 'Draw ~$' + Math.round(room * 0.5).toLocaleString() + ' cash now.', boardChoice.debt === 'borrow'); }
+  else html += optCard('debt', 'nolev', 'No leverage', 'Your mandate keeps you off debt.', false);
+  document.getElementById('optDebt').innerHTML = html;
+}
+function renderTechOptions() {
+  const st = boardBaseSt, reg = RanchEngine.REGIONS[st.region];
+  if (CUR_YEAR < RanchEngine.UNLOCKS.tech) {
+    document.getElementById('techPills').innerHTML = lockedNote(
+      'The tech shelf opens in year ' + RanchEngine.UNLOCKS.tech +
+      ', when vendor pilot programs reach your county.');
+    return;
+  }
+  const avail = Object.keys(RanchEngine.TECHS).filter(t => !st.tech.has(t));
+  document.getElementById('techPills').innerHTML = avail.map(t => {
+    const fit = reg.tech[t], fitWord = fit >= 1.5 ? 'strong fit' : fit >= 1.0 ? 'fair fit' : 'weak fit';
+    const on = boardChoice.techs.includes(t);
+    // color set explicitly: without it the pill inherits the global button's white text
+    return `<button type="button" class="techpill${on ? ' on' : ''}" data-tech="${t}" onclick="setChoice('tech','${t}')" ` +
+      `style="margin:3px;padding:0.4rem 0.65rem;border:1px solid var(--border);border-radius:14px;` +
+      `background:${on ? 'var(--accent)' : 'var(--surface2)'};color:${on ? '#1a1510' : 'var(--text)'};cursor:pointer;font-size:0.8rem">` +
+      `${TECH_LABEL[t]} <span style="color:${on ? '#3a2c10' : 'var(--muted)'}">$${(RanchEngine.TECHS[t].capex / 1000)}k, ${fitWord}</span></button>`;
+  }).join('') || '<span style="color:var(--muted);font-size:0.82rem">You already run every technology.</span>';
+}
+
+function setChoice(group, mode) {
+  if (group === 'tech') {
+    const i = boardChoice.techs.indexOf(mode);
+    if (i >= 0) boardChoice.techs.splice(i, 1); else boardChoice.techs.push(mode);
+    renderTechOptions();
+  }
+  else if (group === 'debt' && mode === 'nolev') { /* not selectable */ }
+  else { boardChoice[group] = mode; if (group === 'herd') renderHerdOptions(); else renderDebtOptions(); }
+  updateConsequence();
+}
+
+function updateConsequence() {
+  const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
+  const w = boardWorld;
+  const n = choiceNumbers();
+  applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices);
+  const bidCeil = Math.round(r.cash * (r.a.bidCashCap || 0));
+  const el = document.getElementById('boardConsequence');
+  el.innerHTML =
+    `<div>After these moves: <b>${r.herd.toLocaleString()}</b> head, ` +
+    `<b>$${Math.round(r.cash).toLocaleString()}</b> cash, ` +
+    `<b>$${Math.round(r.debt).toLocaleString()}</b> debt. ` +
+    `You can commit up to <b>$${bidCeil.toLocaleString()}</b> to any one bull.</div>` +
+    `<div class="fit-note">${fitNote(r)}</div>`;
+}
+// Reigns-style strategic coach: is this year's plan aligned with the mandate?
+function fitNote(r) {
+  const a = ARCHETYPE, h = boardChoice.herd, d = boardChoice.debt;
+  if (r.cash < 0) return 'You are out of cash. Sell cows or borrow before the auction, or you bid nothing.';
+  if ((a === 'conservative' || a === 'family_survival') && d === 'borrow') return 'Your scorecard rewards a low-debt balance sheet. Borrowing works against you.';
+  if (a === 'cost_leader' && h === 'push') return 'Cost Leader: pushing head count hard lifts cost per pound. Scale only where the ground runs cheap.';
+  if (a === 'elite_genetics' && (h === 'push' || h === 'grow')) return 'Elite Genetics: chasing head count dilutes the focus your mandate pays for. Bulls, not cows, are your lever.';
+  if (a === 'rapid_expansion' && (h === 'hold' || h === 'destock')) return 'Rapid Expansion: standing still leaves your growth mandate unmet. Feeder tailwinds are when you push.';
+  if (a === 'seedstock' && h === 'push') return 'Seedstock: your money is in the brand and the bull pen, not raw cow numbers.';
+  if ((a === 'conservative' || a === 'family_survival') && RanchEngine.droughtSeverity(boardWorld, r.region) >= 1 && h !== 'destock') return 'Severe drought and your mandate prizes durability. Selling early beats the liquidation crowd.';
+  return 'This plan reads consistent with your mandate. The auction is where you press the edge.';
+}
+
+async function submitBoard() {
+  if (!boardBaseSt) { msg('Board not ready, reopen the page.', 'err'); return; }
+  const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
+  const w = boardWorld;
+  const n = choiceNumbers();
+  applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices);
+
+  const { error } = await supa.from('teams').update({ state: JSON.parse(JSON.stringify(r, setReplacer)) }).eq('id', TEAM_ID);
+  if (error) { msg('Could not save operations: ' + error.message, 'err'); return; }
+  await supa.from('decisions').insert(
+    { game_id: GAME_ID, team_id: TEAM_ID, year: CUR_YEAR, kind: 'board_submitted',
+      payload: { herd: boardChoice.herd, debt: boardChoice.debt, techs: boardChoice.techs, expandCows: n.expandCows, debtAction: n.debtAction } }
+  );
+  msg('Operations locked: herd ' + r.herd.toLocaleString() + ', cash $' + Math.round(r.cash).toLocaleString() + '. Revise anytime before the auction opens.', 'ok');
+  await refreshMyStats();
+}
+
+// ---- Auction ----
+const TRAIT_LABEL = { ce: 'Calving ease', growth: 'Growth', marb: 'Marbling', forage: 'Forage eff', milk: 'Milk / maternal' };
+function emphasis(v) { return v >= 1.4 ? 'High' : v >= 0.8 ? 'Med' : 'Low'; }
+function emphColor(v) { return v >= 1.4 ? '#2e7d32' : v >= 0.8 ? '#a06a1b' : '#999'; }
+// pre-bid telegraphing (Into the Breach rule: show the consequence before the commit)
+let AUCTION_CASH = 0, AUCTION_SLOTS = 0, AUCTION_LOTS = 0;
+function bidInputs() {
+  return [...document.querySelectorAll('#bullCards input[type=number]')]
+    .map(i => Number(i.value)).filter(v => v > 0);
+}
+function updateBidConseq(bullId) {
+  const el = document.getElementById('conseq_' + bullId);
+  if (!el) return;
+  const v = Number((document.getElementById('bid_' + bullId) || {}).value);
+  if (!v) { el.textContent = ''; return; }
+  const left = AUCTION_CASH - v;
+  const others = Math.max(0, AUCTION_LOTS - 1);
+  el.innerHTML = v > AUCTION_CASH
+    ? `<span style="color:#d99079">That is $${Math.round(v - AUCTION_CASH).toLocaleString()} more cash than you have.</span>`
+    : `Win at this price and cash drops to <b>$${Math.round(left).toLocaleString()}</b>` +
+      (others ? ` with ${others} other lot${others > 1 ? 's' : ''} still in the sale.` : `.`);
+  updateExposure();
+}
+function updateExposure() {
+  const el = document.getElementById('auctionExposure');
+  if (!el) return;
+  const bids = bidInputs();
+  const total = bids.reduce((s, x) => s + x, 0);
+  if (!bids.length) {
+    el.innerHTML = `Cash <b>$${Math.round(AUCTION_CASH).toLocaleString()}</b>, ` +
+      `<b>${AUCTION_SLOTS}</b> sire slot${AUCTION_SLOTS === 1 ? '' : 's'} open. No bids in yet.`;
+    return;
+  }
+  const over = total > AUCTION_CASH;
+  el.innerHTML =
+    `Cash <b>$${Math.round(AUCTION_CASH).toLocaleString()}</b>, <b>${AUCTION_SLOTS}</b> sire slot${AUCTION_SLOTS === 1 ? '' : 's'} open. ` +
+    `If every bid on this page wins you spend <b style="${over ? 'color:#d99079' : ''}">$${Math.round(total).toLocaleString()}</b>` +
+    (over ? ` <span style="color:#d99079">(more than you have: the sale can bust you)</span>.` : `.`);
+}
+
+async function refreshAuction(world) {
+  const [{ data: bulls }, { data: team }] = await Promise.all([
+    supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR).order('created_at'),
+    supa.from('teams').select('state').eq('id', TEAM_ID).single(),
+  ]);
+  const st = team && team.state ? reviveState(team.state) : null;
+  // load this team's existing bids so the cards reflect what is already in
+  const { data: myBids } = await supa.from('bids').select('bull_id,amount')
+    .in('bull_id', (bulls || []).map(b => b.id));
+  const bidMap = {};
+  (myBids || []).forEach(x => { bidMap[x.bull_id] = Number(x.amount); });
+  // stash what the consequence lines need (cash, open sire slots, lot count)
+  AUCTION_CASH = st ? st.cash : 0;
+  const activeN = st ? (st.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length : 0;
+  AUCTION_SLOTS = st ? Math.max(0, (st.rosterCap || 4) - activeN) : 0;
+  AUCTION_LOTS = (bulls || []).filter(b => !b.winner_team).length;
+  renderHerdPanel(st);
+  renderBullCards(bulls || [], world, st, bidMap);
+  updateExposure();
+}
+
+function renderHerdPanel(st) {
+  const el = document.getElementById('auctionHerd');
+  if (!st || !st.g) { el.innerHTML = ''; return; }
+  const reg = RanchEngine.REGIONS[st.region] || { w: {} };
+  const arch = RanchEngine.ARCHETYPES[ARCHETYPE] || { traitVal: {} };
+  const rows = RanchEngine.TRAITS.map(t => {
+    const rw = reg.w[t] || 1, av = arch.traitVal[t] || 1;
+    return `<tr>
+      <td style="text-align:left">${TRAIT_LABEL[t]}</td>
+      <td><strong>${(st.g[t] || 0).toFixed(1)}</strong></td>
+      <td style="color:${emphColor(rw)}">${emphasis(rw)}</td>
+      <td style="color:${emphColor(av)}">${emphasis(av)}</td>
+    </tr>`;
+  }).join('');
+  el.innerHTML =
+    `<div style="border:1px solid var(--border);border-radius:5px;padding:0.7rem 0.9rem;background:var(--surface2)">
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:0.4rem">
+        Your herd at <strong>${esc(st.county || '')}</strong>. A bull helps most when its trait
+        beats your herd number AND that trait reads High for your county or objective.
+      </div>
+      <table style="width:100%;font-size:0.82rem;border-collapse:collapse">
+        <thead><tr>
+          <th style="text-align:left">Trait</th><th>Your herd</th><th>County rewards</th><th>Your objective</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+}
+
+function renderBullCards(bulls, world, st, bidMap) {
+  const container = document.getElementById('bullCards');
+  // preserve anything the user is mid-typing so the poll-driven re-render does not wipe it
+  const active = document.activeElement;
+  const activeId = active && active.id && active.id.indexOf('bid_') === 0 ? active.id : null;
+  const typed = {};
+  container.querySelectorAll('input').forEach(i => { if (i.value !== '') typed[i.id] = i.value; });
+  container.innerHTML = '';
+  const herd = st && st.g ? st.g : null;
+  bulls.forEach((b, idx) => {
+    const lo = Math.round(b.anchor * 0.70);
+    const hi = Math.round(b.anchor * 1.50);
+    const tierClass = 'tag-' + b.tier;
+    const existing = bidMap ? bidMap[b.id] : undefined;
+    const div = document.createElement('div');
+    div.style.cssText = 'border:1px solid var(--border);border-radius:5px;padding:0;margin-bottom:0.9rem;background:var(--surface);overflow:hidden';
+    div.innerHTML =
+      // sale-catalog photo plate (representative image; the lots are generated)
+      bullPhotoPlate(b, idx) +
+      `<div style="padding:0.7rem 1rem 0.9rem">` +
+      `<div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.15rem">` +
+        `<span style="font-family:var(--mono);font-size:0.7rem;color:var(--dim);letter-spacing:0.08em">LOT ${idx + 1}</span>` +
+        `<strong style="font-family:var(--serif);font-size:1.05rem">${esc(b.name || b.sire)}</strong>` +
+        `<span class="tag ${tierClass}" style="margin-left:auto">${b.tier}</span>` +
+      `</div>` +
+      // real Red Bluff lots carry their breeding and consignor plus the actual EPD line
+      (b.name ? `<div style="font-size:0.74rem;color:var(--muted);margin-bottom:0.15rem">` +
+          `${esc((b.meta && b.meta.breed) || '')} by ${esc(b.sire)}` +
+          ((b.meta && b.meta.consignor) ? `, consigned by ${esc(b.meta.consignor)}` : '') + `</div>` : '') +
+      ((b.meta && b.meta.epds) ? `<div style="font-family:var(--mono);font-size:0.66rem;color:var(--dim);margin-bottom:0.5rem">` +
+          ['ced', 'ww', 'yw', 'milk', 'marb'].filter(k => b.meta.epds[k] !== null && b.meta.epds[k] !== undefined)
+            .map(k => k.toUpperCase() + ' ' + b.meta.epds[k]).join(' | ') + `</div>` : `<div style="margin-bottom:0.35rem"></div>`) +
+      `<div class="epd-grid" style="margin-bottom:0.5rem">` +
+        Object.entries(b.catalog).map(([k, v]) => {
+          // mark traits where this bull beats your current herd (an upgrade for you)
+          const up = herd && v > (herd[k] || 0) + 0.3;
+          return `<div class="epd-bar-wrap">${k}: <span class="epd-bar" style="width:${Math.round(v * 12)}px"></span> ${Number(v).toFixed(1)}` +
+            (up ? ` <span style="color:#2e7d32;font-weight:600">+</span>` : '') + `</div>`;
+        }).join('') +
+      `</div>` +
+      `<div class="range-note">Typical range at this tier: $${lo.toLocaleString()} to $${hi.toLocaleString()} (anchor $${Math.round(b.anchor).toLocaleString()})</div>` +
+      (b.winner_team
+        ? `<div class="submitted" style="margin-top:0.4rem">Resolved</div>`
+        : `<div class="bid-row" style="margin-top:0.4rem">` +
+            // in-progress typing wins over the saved bid so the poll never clobbers it
+            `<input type="number" id="bid_${b.id}" min="${Math.round(b.reserve)}" placeholder="Max bid ($)"` +
+              ` oninput="updateBidConseq('${b.id}')"` +
+              (typed['bid_' + b.id] !== undefined ? ` value="${typed['bid_' + b.id]}"` : existing ? ` value="${Math.round(existing)}"` : '') + `>` +
+            `<button onclick="submitBid('${b.id}', ${b.reserve})">${existing ? 'Update Bid' : 'Submit Bid'}</button>` +
+            (existing ? ` <span class="submitted">Current: $${Math.round(existing).toLocaleString()}</span>` : '') +
+          `</div>` +
+          `<div id="conseq_${b.id}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem;min-height:1em"></div>`
+      ) +
+      `</div>`; // close the padded body opened after the photo plate
+    container.appendChild(div);
+  });
+  // restore focus and caret so typing is never interrupted by a background refresh
+  if (activeId) { const el = document.getElementById(activeId); if (el) { el.focus(); const v = el.value; el.value = ''; el.value = v; } }
+  // re-render wiped the consequence lines; rebuild them for every filled bid box
+  bulls.forEach(b => { const i = document.getElementById('bid_' + b.id); if (i && i.value) updateBidConseq(b.id); });
+}
+
+// A representative bull photo (the lots are procedurally generated, so this is stock
+// imagery, never a claim about a specific animal). Assigned by LOT INDEX so no two lots
+// in the same sale share an image (as long as there are at least BULLS_PER_YEAR photos).
+function bullPhoto(idx) {
+  const photos = (typeof window !== 'undefined' && window.BULL_PHOTOS) || [];
+  if (!photos.length) return null;
+  return photos[idx % photos.length];
+}
+function bullPhotoPlate(b, idx) {
+  const src = bullPhoto(idx || 0);
+  if (src) {
+    return `<div style="position:relative;height:150px;background:#12100c">` +
+      `<img src="${src}" alt="Angus bull" style="width:100%;height:100%;object-fit:cover;display:block;opacity:0.96">` +
+      `<span style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(18,16,12,0.85));color:#cbb890;font-size:0.62rem;font-family:var(--mono);padding:0.5rem 0.6rem 0.3rem">Representative image, not this exact lot</span>` +
+      `</div>`;
+  }
+  // fallback until the photo set is added: a catalog frame with a simple bull mark
+  return `<div style="height:96px;background:#1d1811;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border)">` +
+    `<svg width="80" height="52" viewBox="0 0 80 52" fill="none" stroke="#5a4c38" stroke-width="2">` +
+    `<path d="M16 34 q-6 -14 6 -18 q4 -8 10 -4 q8 -4 16 0 q6 -4 10 4 q12 4 6 18 l-4 10 h-8 l-2 -8 h-20 l-2 8 h-8 z"/>` +
+    `<path d="M20 16 l-4 -8 M60 16 l4 -8" stroke-linecap="round"/></svg>` +
+    `<span style="color:#5a4c38;font-family:var(--mono);font-size:0.6rem;margin-left:0.5rem">SALE PHOTO</span></div>`;
+}
+
+async function submitBid(bullId, reserve) {
+  const input = document.getElementById('bid_' + bullId);
+  const amount = Number(input.value);
+  if (!amount || amount < reserve) {
+    msg('Bid must be at least the reserve ($' + Math.round(reserve).toLocaleString() + ').', 'err');
+    return;
+  }
+
+  const { data: team } = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
+  const st = team && team.state ? reviveState(team.state) : null;
+  if (st && amount > st.cash) { msg('Bid exceeds your cash on hand.', 'err'); return; }
+
+  // target the (bull_id, team_id) unique constraint so a revised bid UPDATES instead of
+  // colliding on the row's own primary key (sealed bids are changeable until resolve)
+  const { error } = await supa.from('bids').upsert(
+    { bull_id: bullId, team_id: TEAM_ID, amount },
+    { onConflict: 'bull_id,team_id' }
+  );
+  if (error) { msg('Bid error: ' + error.message, 'err'); return; }
+
+  await logDecision('bid_submitted', { bull_id: bullId, year: CUR_YEAR });
+  submittedBids[bullId] = true;
+  msg('Bid submitted.', 'ok');
+
+  // Re-render to show submitted state
+  const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
+  await refreshAuction(gRow && gRow.world);
+}
+
+// ---- Results after resolve ----
+async function showResults(world) {
+  const [{ data: bulls }, { data: teams }] = await Promise.all([
+    supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR).order('created_at'),
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+  ]);
+  const nameById = Object.fromEntries((teams || []).map(t => [t.id, t.name]));
+  const ids = (bulls || []).map(b => b.id);
+  const { data: myBids } = ids.length
+    ? await supa.from('bids').select('bull_id,amount').in('bull_id', ids).eq('team_id', TEAM_ID)
+    : { data: [] };
+  const myBid = Object.fromEntries((myBids || []).map(x => [x.bull_id, Number(x.amount)]));
+  const { data: team } = await supa.from('teams').select('*').eq('id', TEAM_ID).single();
+  const st = team && team.state ? reviveState(team.state) : null;
+  const won = (bulls || []).filter(b => b.winner_team === TEAM_ID);
+  const spent = won.reduce((s, b) => s + Number(b.price || 0), 0);
+
+  let html = `<div style="font-family:var(--serif);font-size:1.2rem;margin-bottom:0.6rem;color:var(--accent)">` +
+    (won.length ? `You won ${won.length} bull${won.length > 1 ? 's' : ''} for $${Math.round(spent).toLocaleString()}.` : `You won no bulls this year.`) +
+    `</div>`;
+
+  html += `<table style="margin-bottom:0.8rem"><thead><tr>` +
+    `<th>Lot</th><th>Bull</th><th>Tier</th><th>Winner</th><th>Price</th><th>Your bid</th></tr></thead><tbody>`;
+  (bulls || []).forEach((b, i) => {
+    const mine = b.winner_team === TEAM_ID;
+    const winner = b.winner_team
+      ? (mine ? '<strong style="color:var(--accent)">You</strong>' : esc(nameById[b.winner_team] || 'a ranch'))
+      : '<span style="color:var(--muted)">no sale</span>';
+    const mb = myBid[b.id];
+    let bidCell = '<span style="color:var(--muted)">-</span>';
+    if (mb !== undefined) {
+      bidCell = '$' + Math.round(mb).toLocaleString();
+      if (!mine && b.price) bidCell += ` <span style="color:var(--muted)">(short $${Math.round(b.price - mb).toLocaleString()})</span>`;
+    }
+    html += `<tr${mine ? ' style="background:#2f2513"' : ''}>` +
+      `<td style="font-family:var(--mono)">${i + 1}</td><td>${esc(b.name || b.sire)}</td>` +
+      `<td><span class="tag tag-${b.tier}">${b.tier}</span></td><td>${winner}</td>` +
+      `<td style="font-family:var(--mono)">${b.price ? '$' + Math.round(b.price).toLocaleString() : '-'}</td>` +
+      `<td style="font-family:var(--mono)">${bidCell}</td></tr>`;
+  });
+  html += `</tbody></table>`;
+
+  if (st) {
+    const gAvg = RanchEngine.avg(RanchEngine.TRAITS.map(t => st.g[t]));
+    html += `<div style="font-size:0.85rem;color:var(--dim)">Your ranch after the year: ` +
+      `<strong style="color:var(--text)">${st.herd.toLocaleString()}</strong> head, cash ` +
+      `<strong style="color:var(--text)">$${Math.round(st.cash).toLocaleString()}</strong>, ` +
+      `debt $${Math.round(st.debt).toLocaleString()}, genetics ${gAvg.toFixed(1)}, reputation ${Math.round(st.rep)}.</div>`;
+  }
+  html += cattlemensWeekly(world, bulls || [], teams || [], st, nameById);
+  html += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem">Waiting for the instructor to advance to the next year.</div>`;
+
+  document.getElementById('cardWon').innerHTML = html;
+  document.getElementById('secWon').style.display = '';
+}
+
+// ---- Cattlemen's Weekly: the year-end industry report (the Capsim Courier / Glo-Bus
+// FIR move: public benchmarks + a noisy analyst outlook, so teams learn to read the
+// market instead of only their own books) ----
+function cattlemensWeekly(w, bulls, teams, myState, nameById) {
+  if (!w) return '';
+  const sold = bulls.filter(b => b.winner_team && b.price);
+  const gross = sold.reduce((s, b) => s + Number(b.price), 0);
+  const top = sold.slice().sort((a, b) => Number(b.price) - Number(a.price))[0];
+  const fh = w.feederHist || [];
+  const prevF = fh.length >= 2 ? fh[fh.length - 2] : 1.0;
+  const dF = (w.feederIdx / prevF - 1) * 100;
+  // public table: operational facts only, never a strategy label
+  const states = teams.map(t => ({ name: t.name, st: t.state ? reviveState(t.state) : null, isMe: t.id === TEAM_ID }))
+    .filter(x => x.st);
+  const rows = states.slice().sort((a, b) => b.st.herd - a.st.herd).map(x =>
+    `<tr${x.isMe ? ' style="background:#2f2513"' : ''}><td>${esc(x.name)}${x.isMe ? ' (you)' : ''}</td>` +
+    `<td style="font-family:var(--mono)">${x.st.herd.toLocaleString()}</td>` +
+    `<td style="font-family:var(--mono)">${(x.st.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length}</td>` +
+    `<td style="font-family:var(--mono)">${Math.round(x.st.rep || 0)}</td></tr>`).join('');
+  // your books vs the room (cost per lb is private; only YOUR line and the median print)
+  let books = '';
+  if (myState && myState.totalLbs > 0) {
+    const mine = myState.totalCost / myState.totalLbs;
+    const all = states.filter(x => x.st.totalLbs > 0).map(x => x.st.totalCost / x.st.totalLbs).sort((a, b) => a - b);
+    const med = all.length ? all[Math.floor(all.length / 2)] : mine;
+    books = `<div style="font-size:0.82rem;margin-top:0.55rem">Your running cost sits at ` +
+      `<b style="font-family:var(--mono)">$${mine.toFixed(2)}/lb</b> weaned against a table median of ` +
+      `<b style="font-family:var(--mono)">$${med.toFixed(2)}/lb</b>` +
+      (mine <= med ? ', the lean side of the room.' : ', the expensive side of the room.') + `</div>`;
+  }
+  // analyst outlook: the drought odds are the real transition matrix (honest structure),
+  // the feeder call is drift + the liquidation echo. Nobody prints next year's shock.
+  const t = RanchEngine.DROUGHT_T[w.drought] || { severe: 0.15, moderate: 0.35 };
+  const mildP = Math.max(0, 1 - t.severe - t.moderate);
+  const h = w.droughtHist || [];
+  let echo = 0;
+  if (h.length >= 1 && h[h.length - 1] === 'severe') echo -= 0.03;
+  if (h.length >= 2 && h[h.length - 2] === 'severe') echo += 0.07;
+  const call = w.feederIdx * (1 + 0.01 + echo);
+  const yearDone = CUR_YEAR >= RanchEngine.YEARS;
+  const outlook = yearDone ? '' :
+    `<div style="font-size:0.82rem;margin-top:0.55rem"><b>Analyst outlook for year ${CUR_YEAR + 1}:</b> ` +
+    `drought odds ${Math.round(t.severe * 100)}% severe / ${Math.round(t.moderate * 100)}% moderate / ${Math.round(mildP * 100)}% mild. ` +
+    `Feeder index called at <b style="font-family:var(--mono)">${call.toFixed(2)}</b> ` +
+    `(range ${(call * 0.90).toFixed(2)} to ${(call * 1.10).toFixed(2)})` +
+    (echo > 0 ? ', lifted by the post-drought herd rebuild.' : echo < 0 ? ', soft on drought liquidation.' : '.') +
+    ` <span style="color:var(--muted)">No analyst prints next year's shock.</span></div>`;
+  return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
+    `<div style="font-family:var(--serif);font-weight:700;font-size:1.02rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.5rem">` +
+    `The Cattlemen's Weekly <span style="font-family:var(--mono);font-weight:400;font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">YEAR ${CUR_YEAR} WRAP</span></div>` +
+    `<div style="font-size:0.82rem">Feeder index closed at <b style="font-family:var(--mono)">${(w.feederIdx || 1).toFixed(2)}</b> ` +
+    `(${dF >= 0 ? '+' : ''}${dF.toFixed(0)}% on the year) under ${esc(SHOCK_WORD[w.shock] || w.shock)}, ${esc(w.drought)} drought conditions. ` +
+    (sold.length
+      ? `The bull sale grossed <b style="font-family:var(--mono)">$${Math.round(gross).toLocaleString()}</b> on ${sold.length} of ${bulls.length} lots` +
+        (top ? `, topped by ${esc(top.name || top.sire)} at <b style="font-family:var(--mono)">$${Math.round(top.price).toLocaleString()}</b> to ${esc(nameById[top.winner_team] || 'a ranch')}.` : `.`)
+      : `Every lot in the bull sale went home unsold, a no-sale year.`) + `</div>` +
+    `<table style="margin-top:0.55rem;font-size:0.8rem"><thead><tr><th>Outfit</th><th>Herd</th><th>Herd sires</th><th>Rep</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>` +
+    books + outlook + `</div>`;
+}
+
+// ---- Standings ----
+async function refreshStandings() {
+  const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
+  const rows = (teams || []).map(t => {
+    const st = t.state ? reviveState(t.state) : null;
+    return { name: t.name, cash: st ? Math.round(st.cash) : 0, isMe: t.id === TEAM_ID };
+  }).sort((a, b) => b.cash - a.cash);
+  const maxCash = Math.max(...rows.map(r => r.cash), 1);
+  const tbody = document.getElementById('tbodyStandings');
+  tbody.innerHTML = '';
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    const barW = Math.max(2, Math.round(r.cash / maxCash * 100));
+    tr.style.fontWeight = r.isMe ? 'bold' : '';
+    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.name)}${r.isMe ? ' (you)' : ''}</td>` +
+      `<td>$${r.cash.toLocaleString()}</td>` +
+      `<td><span class="lb-bar" style="width:${barW}px"></span></td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('secStandings').style.display = '';
+}
+
+// ---- Polling fallback ----
+function startPolling() {
+  setInterval(async () => {
+    if (!GAME_ID) return;
+    const { data: game } = await supa.from('games').select('*').eq('id', GAME_ID).single();
+    if (!game) return;
+    if (game.phase !== PHASE) await handlePhaseChange(game);
+    else {
+      if (PHASE === 'market') await refreshMarket();
+      if (PHASE === 'auction') await refreshAuction(game.world);
+      if (PHASE === 'resolve' || PHASE === 'ended') await refreshStandings();
+    }
+  }, POLL_MS);
+}
+
+// ---- Utilities ----
+function reviveState(st) {
+  const obj = JSON.parse(JSON.stringify(st));
+  if (obj.tech && obj.tech.__type === 'Set') obj.tech = new Set(obj.tech.values);
+  else if (Array.isArray(obj.tech)) obj.tech = new Set(obj.tech);
+  else obj.tech = new Set();
+  // Reattach the live archetype (its functions do not survive JSON) so engine helpers work.
+  if (obj.key && RanchEngine.ARCHETYPES[obj.key]) obj.a = RanchEngine.ARCHETYPES[obj.key];
+  return obj;
+}
+
+function setReplacer(key, value) {
+  if (value instanceof Set) return { __type: 'Set', values: [...value] };
+  return value;
+}
+
+async function logDecision(kind, payload) {
+  if (!GAME_ID) return;
+  await supa.from('decisions').insert({
+    game_id: GAME_ID, team_id: TEAM_ID, year: CUR_YEAR, kind, payload,
+  });
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

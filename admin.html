@@ -1,0 +1,809 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ranch Strategy Game | Instructor Console</title>
+<style>
+  :root {
+    --tan:    #c8a96e;
+    --rust:   #9b3a1a;
+    --dusk:   #2a2018;
+    --sand:   #f5ede0;
+    --sage:   #6b7c5c;
+    --sky:    #4a7fa5;
+    --fg:     #1a1410;
+    --muted:  #6b5e4a;
+    --border: #d4b896;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Georgia, serif; background: var(--sand); color: var(--fg); min-height: 100vh; }
+  header { background: var(--dusk); color: var(--tan); padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
+  header h1 { font-size: 1.3rem; letter-spacing: 0.04em; }
+  header .badge { font-size: 0.75rem; background: var(--rust); color: #fff; padding: 0.2rem 0.5rem; border-radius: 3px; font-family: monospace; }
+  main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+  section { margin-bottom: 2rem; }
+  h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--rust); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 1rem; }
+  .card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1.2rem 1.5rem; }
+  .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem; }
+  button { background: var(--rust); color: #fff; border: none; padding: 0.5rem 1.1rem; border-radius: 4px; font-family: inherit; font-size: 0.9rem; cursor: pointer; }
+  button:hover { background: #7a2d12; }
+  button:disabled { background: #bbb; cursor: default; }
+  button.secondary { background: var(--sage); }
+  button.secondary:hover { background: #55624a; }
+  .code { font-family: monospace; font-size: 1.5rem; letter-spacing: 0.2em; color: var(--rust); font-weight: bold; }
+  .status { font-size: 0.8rem; color: var(--muted); font-style: italic; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+  th { background: var(--dusk); color: var(--tan); text-align: left; padding: 0.4rem 0.6rem; }
+  td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  .tag { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.75rem; font-family: monospace; }
+  .tag-ai { background: #e8f0fe; color: #1a56db; }
+  .tag-human { background: #def7ec; color: #1a7a4a; }
+  .tag-elite { background: #fef3c7; color: #92400e; }
+  .tag-premium { background: #ede9fe; color: #5b21b6; }
+  .tag-mid { background: #e0f2fe; color: #075985; }
+  .tag-commercial { background: #f1f5f9; color: #475569; }
+  #msg { padding: 0.5rem 1rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.85rem; display: none; }
+  #msg.ok { background: #def7ec; color: #1a7a4a; display: block; }
+  #msg.err { background: #fde8e8; color: #c81e1e; display: block; }
+  .phase-chip { display: inline-block; padding: 0.2rem 0.7rem; border-radius: 12px; font-size: 0.8rem; background: var(--dusk); color: var(--tan); font-family: monospace; }
+  .lb-bar { display: inline-block; height: 8px; background: var(--rust); border-radius: 4px; min-width: 2px; }
+  .metric-btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; }
+  .metric-btn.active { background: var(--sky); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Ranch Strategy Game</h1>
+  <span class="badge">Instructor Console</span>
+  <span id="phaseChip" class="phase-chip" style="margin-left:auto">lobby</span>
+</header>
+<main>
+  <div id="msg"></div>
+
+  <!-- Create Game -->
+  <section id="secCreate">
+    <h2>Create Game</h2>
+    <div class="card">
+      <div class="row">
+        <button id="btnCreate" onclick="createGame()">Create New Game</button>
+        <span class="status">Generates a 5-letter join code for students.</span>
+      </div>
+      <div class="row" style="margin-top:0.6rem">
+        <button id="btnResume" onclick="resumeGame()">Resume Last Game</button>
+        <span class="status">Reloads the most recent game so a page refresh does not lose it (useful when testing solo).</span>
+      </div>
+      <div id="joinCodeBox" style="display:none">
+        Join code: <span class="code" id="joinCodeDisplay"></span>
+        <div class="status" style="margin-top:0.4rem">Share this code with students. They open team.html and enter it.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Lobby -->
+  <section id="secLobby" style="display:none">
+    <h2>Lobby <span id="teamCountBadge" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <div class="card">
+      <table id="tblTeams">
+        <thead><tr><th>Team</th><th>Archetype</th><th>Type</th></tr></thead>
+        <tbody id="tbodyTeams"></tbody>
+      </table>
+      <div class="row" style="margin-top:1rem">
+        <button id="btnStart" onclick="startGame()" disabled>Start Game</button>
+        <span class="status">Requires at least 1 human team. AI teams fill the remaining archetype slots.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Market Monitor -->
+  <section id="secMarket" style="display:none">
+    <h2>Ranch Market</h2>
+    <div class="card">
+      <table id="tblRanches">
+        <thead><tr><th>County</th><th>Region</th><th>Herd</th><th>Ask</th><th>Bought By</th></tr></thead>
+        <tbody id="tbodyRanches"></tbody>
+      </table>
+      <div class="row" style="margin-top:1rem">
+        <button id="btnOpenAuction" onclick="openYear()" disabled>Open Year 1 (Board Meeting)</button>
+        <span class="status" id="marketStatus">Waiting for all teams to buy a ranch.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Board Meeting Monitor -->
+  <section id="secBoard" style="display:none">
+    <h2>Board Meeting <span id="boardYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <div class="card">
+      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.8rem">
+        Teams set operations for the year (expand or destock, borrow or pay down, adopt technology).
+        AI ranches have already decided. Open the auction when the human teams are ready.
+      </p>
+      <table id="tblBoard">
+        <thead><tr><th>Team</th><th>Type</th><th>Operations set</th></tr></thead>
+        <tbody id="tbodyBoard"></tbody>
+      </table>
+      <div class="row" style="margin-top:1rem">
+        <button id="btnOpenAuctionReal" onclick="openAuction()">Open Auction</button>
+        <span class="status" id="boardStatus"></span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Auction Monitor -->
+  <section id="secAuction" style="display:none">
+    <h2>Sealed-Bid Auction <span id="auctionYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <div class="card">
+      <table id="tblBulls">
+        <thead><tr><th>Bull</th><th>Tier</th><th>Anchor</th><th>Range</th><th>Bids In</th><th>Winner</th><th>Price</th></tr></thead>
+        <tbody id="tbodyBulls"></tbody>
+      </table>
+      <div class="row" style="margin-top:1rem">
+        <button id="btnResolve" onclick="resolveAuction()">Resolve Auction</button>
+        <button id="btnNextYear" onclick="nextYear()" style="display:none" class="secondary">Advance to Next Year</button>
+        <span class="status" id="auctionStatus">Collecting sealed bids.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Leaderboard -->
+  <section id="secLeaderboard" style="display:none">
+    <h2>Leaderboard
+      <button class="metric-btn active" id="btnMetCash" onclick="setMetric('cash')" style="margin-left:0.8rem">Cash</button>
+      <button class="metric-btn" id="btnMetHerd" onclick="setMetric('herd')">Herd</button>
+      <button class="metric-btn" id="btnMetRep" onclick="setMetric('rep')">Reputation</button>
+    </h2>
+    <div class="card">
+      <table id="tblLB">
+        <thead><tr><th>Rank</th><th>Team</th><th id="lbMetricHeader">Cash</th><th>Bar</th></tr></thead>
+        <tbody id="tbodyLB"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<!-- supabase-js v2 UMD from jsdelivr, pinned -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
+<script src="config.js"></script>
+<script src="bull-catalog.js?v=1"></script>
+<script src="engine.js"></script>
+<script>
+'use strict';
+
+const supa = supabase.createClient(window.SUPA_URL, window.SUPA_ANON_KEY);
+
+let GAME_ID   = null;
+let JOIN_CODE = null;
+let TEAMS     = [];   // {id, name, archetype, is_ai, state}
+let BULLS     = [];   // current year bulls
+let CUR_YEAR  = 0;
+let lb_metric = 'cash';
+
+// Polling fallback interval (ms) for realtime events
+const POLL_MS = 4000;
+let pollTimer = null;
+
+function msg(text, type) {
+  const el = document.getElementById('msg');
+  el.textContent = text;
+  el.className = type;
+}
+
+function randCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  return Array.from({length: 5}, () => chars[Math.floor(Math.random() * chars.length)]).join('');
+}
+
+// ---- Phase / chip helpers ----
+function setPhaseChip(phase) {
+  document.getElementById('phaseChip').textContent = phase;
+}
+function showSection(id) {
+  ['secCreate','secLobby','secMarket','secBoard','secAuction','secLeaderboard'].forEach(s => {
+    document.getElementById(s).style.display = (s === id || id === null) ? '' : 'none';
+  });
+}
+
+// ---- Create game ----
+async function createGame() {
+  document.getElementById('btnCreate').disabled = true;
+  JOIN_CODE = randCode();
+  const { data, error } = await supa.from('games').insert({
+    join_code: JOIN_CODE, status: 'lobby', phase: 'lobby', year: 0, world: null
+  }).select().single();
+  if (error) { msg('Error creating game: ' + error.message, 'err'); document.getElementById('btnCreate').disabled = false; return; }
+  GAME_ID = data.id;
+
+  // Log game creation to decisions
+  await logDecision(null, 'game_created', { join_code: JOIN_CODE });
+
+  document.getElementById('joinCodeDisplay').textContent = JOIN_CODE;
+  document.getElementById('joinCodeBox').style.display = '';
+  document.getElementById('secLobby').style.display = '';
+  msg('Game created. Join code: ' + JOIN_CODE, 'ok');
+  subscribeToTeams();
+  startPolling();
+}
+
+// ---- Resume the most recent game (survives a page refresh) ----
+async function resumeGame() {
+  const { data, error } = await supa.from('games').select('*').order('created_at', { ascending: false }).limit(1);
+  if (error) { msg('Resume failed: ' + error.message, 'err'); return; }
+  if (!data || !data.length) { msg('No game found to resume. Create one first.', 'err'); return; }
+  const g = data[0];
+  GAME_ID = g.id; JOIN_CODE = g.join_code; CUR_YEAR = g.year || 0;
+  document.getElementById('joinCodeDisplay').textContent = JOIN_CODE;
+  document.getElementById('joinCodeBox').style.display = '';
+  setPhaseChip(g.phase);
+  await refreshTeams();
+  subscribeToTeams();
+  startPolling();
+  // land in the section matching the game's current phase
+  if (g.phase === 'market') {
+    showSection('secMarket');
+    document.getElementById('secLeaderboard').style.display = '';
+    subscribeToRanches();
+    await refreshRanches();
+  } else if (g.phase === 'board') {
+    showSection('secBoard');
+    document.getElementById('secLeaderboard').style.display = '';
+    document.getElementById('btnOpenAuctionReal').disabled = false;
+    document.getElementById('boardYear').textContent = 'Year ' + CUR_YEAR;
+    await refreshBoard();
+  } else if (g.phase === 'auction' || g.phase === 'resolve') {
+    showSection('secAuction');
+    document.getElementById('secLeaderboard').style.display = '';
+    await refreshAuction();
+  } else {
+    showSection('secLobby');
+  }
+  msg('Resumed game ' + JOIN_CODE + ' at phase: ' + g.phase + ' (year ' + CUR_YEAR + ').', 'ok');
+}
+
+// ---- Realtime: teams joining ----
+function subscribeToTeams() {
+  supa.channel('teams-' + GAME_ID)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'teams', filter: 'game_id=eq.' + GAME_ID }, () => refreshTeams())
+    .subscribe();
+}
+
+async function refreshTeams() {
+  if (!GAME_ID) return;
+  const { data } = await supa.from('teams').select('*').eq('game_id', GAME_ID).order('created_at');
+  TEAMS = data || [];
+  renderTeams();
+  renderLeaderboard();
+}
+
+function renderTeams() {
+  const tbody = document.getElementById('tbodyTeams');
+  tbody.innerHTML = '';
+  TEAMS.forEach(t => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(t.name)}</td><td>${esc(t.archetype)}</td>` +
+      `<td><span class="tag ${t.is_ai ? 'tag-ai' : 'tag-human'}">${t.is_ai ? 'AI' : 'Human'}</span></td>`;
+    tbody.appendChild(tr);
+  });
+  const human = TEAMS.filter(t => !t.is_ai).length;
+  document.getElementById('teamCountBadge').textContent = human + ' human team' + (human !== 1 ? 's' : '');
+  document.getElementById('btnStart').disabled = human < 1;
+}
+
+// ---- Start game: deal archetypes, insert AI teams, generate listings ----
+const AI_NAMES = [
+  'Rimrock Cattle Co.', 'High Desert Stock', 'Sage Flat Ranch', 'Copper Canyon Beef',
+  'Juniper Ridge Cattle', 'Iron Creek Ranch', 'Owl Butte Angus', 'Clearwater Livestock',
+  'Sagebrush Hollow', 'Pronghorn Basin Ranch'
+];
+
+async function startGame() {
+  document.getElementById('btnStart').disabled = true;
+  const humanTeams = TEAMS.filter(t => !t.is_ai);
+  const usedArch   = humanTeams.map(t => t.archetype);
+  const allArch    = Object.keys(RanchEngine.ARCHETYPES).filter(k => !RanchEngine.ARCHETYPES[k].probe);
+  const remaining  = allArch.filter(a => !usedArch.includes(a));
+
+  // Shuffle remaining archetypes into AI slots
+  remaining.sort(() => Math.random() - 0.5);
+  const aiInserts = remaining.map((arch, i) => ({
+    game_id: GAME_ID,
+    name: AI_NAMES[i % AI_NAMES.length],
+    archetype: arch,
+    state: null,
+    is_ai: true,
+  }));
+  if (aiInserts.length) {
+    const { error: aiErr } = await supa.from('teams').insert(aiInserts);
+    if (aiErr) { msg('Error inserting AI teams: ' + aiErr.message, 'err'); return; }
+  }
+
+  // Refresh teams list
+  await refreshTeams();
+
+  // Generate ranch listings and insert into ranches table
+  const listings = RanchEngine.makeListings();
+  const ranchRows = listings.map(l => ({
+    game_id: GAME_ID,
+    county: l.county, region: l.region, herd: l.herd, land_cap: l.landCap, ask: l.ask,
+    bought_by: null,
+  }));
+  const { error: rErr } = await supa.from('ranches').insert(ranchRows);
+  if (rErr) { msg('Error inserting ranches: ' + rErr.message, 'err'); return; }
+
+  // Advance to market phase
+  const world = RanchEngine.newWorld();
+  await supa.from('games').update({ status: 'active', phase: 'market', year: 0, world }).eq('id', GAME_ID);
+  CUR_YEAR = 0;
+
+  await logDecision(null, 'phase_advanced', { from: 'lobby', to: 'market' });
+
+  // AI teams do NOT buy yet: human teams pick first, AI fills from what is left when the
+  // instructor opens Year 1 (see openYear -> aiMarketPurchases).
+
+  setPhaseChip('market');
+  document.getElementById('secLobby').style.display = 'none';
+  document.getElementById('secMarket').style.display = '';
+  document.getElementById('secLeaderboard').style.display = '';
+  msg('Game started. Ranch market is open.', 'ok');
+  subscribeToRanches();
+  refreshRanches();
+}
+
+// ---- AI market purchases (runs at Year 1 open, after humans have first pick; idempotent) ----
+async function aiMarketPurchases() {
+  const [{ data: ranches }, { data: allRanches }, { data: teams }] = await Promise.all([
+    supa.from('ranches').select('*').eq('game_id', GAME_ID).is('bought_by', null),
+    supa.from('ranches').select('bought_by').eq('game_id', GAME_ID),
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+  ]);
+  TEAMS = teams || [];
+  // only AI teams that do not already own a ranch (so re-running is a no-op)
+  const owners = new Set((allRanches || []).filter(r => r.bought_by).map(r => r.bought_by));
+  const aiTeams = TEAMS.filter(t => t.is_ai && !owners.has(t.id));
+  if (!aiTeams.length) return;
+  const allListings = ranches || [];
+  const medianAsk = RanchEngine.median(allListings.map(l => l.ask));
+  const remaining = [...allListings];
+
+  // Process in random order so AI teams contest listings
+  aiTeams.sort(() => Math.random() - 0.5);
+  for (const team of aiTeams) {
+    if (!remaining.length) break;
+    const policy = RanchEngine.BUY_POLICY[team.archetype];
+    if (!policy) continue;
+
+    let bestI = 0, bestS = -Infinity;
+    remaining.forEach((l, i) => {
+      const reg = RanchEngine.REGIONS[l.region];
+      const s = policy(l, { left: RanchEngine.START_CASH - l.ask, reg, medianAsk });
+      if (s > bestS) { bestS = s; bestI = i; }
+    });
+    const chosen = remaining.splice(bestI, 1)[0];
+
+    // Build initial ranch state using the engine
+    const ranchState = RanchEngine.makeRanch(team.archetype, { ...chosen, landCap: chosen.land_cap });
+    // baseline anchors so drawdown/resilience scoring has a reference point (matches playGame)
+    const w0 = RanchEngine.newWorld();
+    ranchState.cash0 = ranchState.cash;
+    ranchState.eq0 = RanchEngine.equity(ranchState, w0);
+    ranchState.peakEquity = ranchState.eq0 - ranchState.cash0;
+
+    await supa.from('ranches').update({ bought_by: team.id }).eq('id', chosen.id);
+    await supa.from('teams').update({ state: JSON.parse(JSON.stringify(ranchState, setReplacer)) })
+      .eq('id', team.id);
+    await logDecision(team.id, 'ranch_purchase', { ranch_id: chosen.id, county: chosen.county, ask: chosen.ask });
+  }
+}
+
+// JSON replacer: serialize Set as array
+function setReplacer(key, value) {
+  if (value instanceof Set) return { __type: 'Set', values: [...value] };
+  return value;
+}
+
+// ---- Ranch market ----
+function subscribeToRanches() {
+  supa.channel('ranches-' + GAME_ID)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'ranches', filter: 'game_id=eq.' + GAME_ID }, () => refreshRanches())
+    .subscribe();
+}
+
+async function refreshRanches() {
+  if (!GAME_ID) return;
+  const [{ data: ranches }, { data: teams }] = await Promise.all([
+    supa.from('ranches').select('*').eq('game_id', GAME_ID),
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+  ]);
+  TEAMS = teams || [];
+  const total = (ranches || []).length;
+  renderRanches(ranches || [], teams || []);
+  // Humans pick first from a surplus market; AI teams claim what is left at Year 1 open.
+  // So the gate waits only on the HUMAN teams, not the AI (who have no ranch yet).
+  const humans = TEAMS.filter(t => !t.is_ai);
+  const ownerIds = new Set((ranches || []).filter(r => r.bought_by).map(r => r.bought_by));
+  const humansWaiting = humans.filter(t => !ownerIds.has(t.id)).length;
+  const allHumansBought = humans.length > 0 && humansWaiting === 0;
+  document.getElementById('btnOpenAuction').disabled = !allHumansBought;
+  document.getElementById('marketStatus').textContent = allHumansBought
+    ? 'All human teams have bought in. Open Year 1 and the AI ranches take what is left.'
+    : humansWaiting + ' of ' + humans.length + ' human teams still choosing a ranch (' + total + ' listings on the map).';
+  renderLeaderboard();
+}
+
+function renderRanches(ranches, teams) {
+  const teamMap = Object.fromEntries(teams.map(t => [t.id, t]));
+  const tbody = document.getElementById('tbodyRanches');
+  tbody.innerHTML = '';
+  ranches.forEach(r => {
+    const buyer = r.bought_by ? teamMap[r.bought_by] : null;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(r.county)}</td><td>${esc(r.region)}</td>` +
+      `<td>${r.herd.toLocaleString()}</td>` +
+      `<td>$${r.ask.toLocaleString()}</td>` +
+      `<td>${buyer ? esc(buyer.name) + (buyer.is_ai ? ' <span class="tag tag-ai">AI</span>' : '') : '<em>Available</em>'}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+// ---- Open a year: step the world, open the board meeting ----
+async function openYear() {
+  document.getElementById('btnOpenAuction').disabled = true;
+  CUR_YEAR++;
+
+  const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
+  const world = gRow.world || RanchEngine.newWorld();
+  RanchEngine.stepWorld(world);
+  await supa.from('games').update({ year: CUR_YEAR, world, phase: 'board' }).eq('id', GAME_ID);
+  await logDecision(null, 'phase_advanced', { from: (CUR_YEAR === 1 ? 'market' : 'resolve'), to: 'board', year: CUR_YEAR });
+
+  // AI ranches buy their ranches now (year 1 only; idempotent), AFTER the humans have
+  // taken first pick, then make operational decisions before the auction.
+  await aiMarketPurchases();
+  await applyAiDecisions(world);
+
+  setPhaseChip('board');
+  showSection('secBoard');
+  document.getElementById('secLeaderboard').style.display = '';
+  document.getElementById('btnOpenAuctionReal').disabled = false;
+  document.getElementById('boardYear').textContent = 'Year ' + CUR_YEAR;
+  msg('Year ' + CUR_YEAR + ' board meeting is open. Teams set operations, then open the auction.', 'ok');
+  startPolling();
+  refreshBoard();
+}
+
+async function applyAiDecisions(world) {
+  const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
+  TEAMS = teams || [];
+  for (const team of TEAMS) {
+    if (!team.is_ai || !team.state) continue;
+    const st = reviveState(team.state);
+    const w2 = Object.assign({}, world, { year: CUR_YEAR });
+    RanchEngine.decideYear(st, w2);
+    await supa.from('teams').update({ state: JSON.parse(JSON.stringify(st, setReplacer)) }).eq('id', team.id);
+  }
+}
+
+async function refreshBoard() {
+  const [{ data: teams }, { data: decs }] = await Promise.all([
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+    supa.from('decisions').select('team_id').eq('game_id', GAME_ID).eq('year', CUR_YEAR).eq('kind', 'board_submitted'),
+  ]);
+  TEAMS = teams || [];
+  const submitted = new Set((decs || []).map(d => d.team_id));
+  const tbody = document.getElementById('tbodyBoard');
+  tbody.innerHTML = '';
+  const humans = TEAMS.filter(t => !t.is_ai);
+  TEAMS.forEach(t => {
+    const set = t.is_ai ? 'AI decided' : (submitted.has(t.id) ? 'Yes' : 'waiting');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${esc(t.name)}</td><td>${t.is_ai ? 'AI' : 'Human'}</td><td>${set}</td>`;
+    tbody.appendChild(tr);
+  });
+  const waiting = humans.filter(t => !submitted.has(t.id)).length;
+  document.getElementById('boardStatus').textContent = waiting === 0
+    ? 'All human teams have set operations. Ready to open the auction.'
+    : waiting + ' of ' + humans.length + ' human teams still deciding.';
+}
+
+// ---- Open auction ----
+async function openAuction() {
+  document.getElementById('btnOpenAuctionReal').disabled = true;
+
+  const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
+  const world = gRow.world || RanchEngine.newWorld();
+  await supa.from('games').update({ phase: 'auction' }).eq('id', GAME_ID);
+  await logDecision(null, 'phase_advanced', { from: 'board', to: 'auction', year: CUR_YEAR });
+
+  // Generate bulls and insert. With the real Red Bluff catalog loaded, lots carry real
+  // bull names; retry duplicate names so one sale never lists the same animal twice.
+  const bullRows = [];
+  const usedNames = new Set();
+  for (let i = 0; i < RanchEngine.BULLS_PER_YEAR; i++) {
+    let b = RanchEngine.makeBull(world);
+    for (let tries = 0; b.name && usedNames.has(b.name) && tries < 25; tries++) {
+      b = RanchEngine.makeBull(world);
+    }
+    if (b.name) usedNames.add(b.name);
+    bullRows.push({
+      game_id: GAME_ID, year: CUR_YEAR,
+      sire: b.sire, tier: b.tier,
+      name: b.name || null,
+      meta: b.name ? { breed: b.breed, consignor: b.consignor, epds: b.epds, realYear: b.realYear } : null,
+      catalog: b.catalog, truth: b.truth,
+      anchor: b.anchor, reserve: b.reserve,
+      winner_team: null, price: null,
+    });
+  }
+  await supa.from('bulls').insert(bullRows);
+
+  setPhaseChip('auction');
+  showSection('secAuction');
+  document.getElementById('secLeaderboard').style.display = '';
+  document.getElementById('btnResolve').disabled = false;
+  document.getElementById('auctionYear').textContent = 'Year ' + CUR_YEAR;
+  msg('Auction open for Year ' + CUR_YEAR + '. Waiting for sealed bids.', 'ok');
+  subscribeToAuction();
+  refreshAuction();
+}
+
+// ---- Auction monitor ----
+function subscribeToAuction() {
+  supa.channel('bids-' + GAME_ID + '-' + CUR_YEAR)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'bids' }, () => refreshAuction())
+    .subscribe();
+}
+
+async function refreshAuction() {
+  if (!GAME_ID) return;
+  const [{ data: bulls }, { data: bids }, { data: teams }] = await Promise.all([
+    supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR),
+    supa.from('bids').select('bull_id, team_id').in('bull_id', []),  // placeholder; full fetch below
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+  ]);
+  BULLS = bulls || [];
+  TEAMS = teams || [];
+
+  // Fetch bids for this year's bulls
+  const bullIds = BULLS.map(b => b.id);
+  let allBids = [];
+  if (bullIds.length) {
+    const { data: bidData } = await supa.from('bids').select('bull_id, team_id').in('bull_id', bullIds);
+    allBids = bidData || [];
+  }
+
+  const teamMap = Object.fromEntries(TEAMS.map(t => [t.id, t]));
+  const humanCount = TEAMS.filter(t => !t.is_ai).length;
+
+  // Count bids per bull
+  const bidCount = {};
+  allBids.forEach(b => { bidCount[b.bull_id] = (bidCount[b.bull_id] || 0) + 1; });
+
+  renderAuction(BULLS, bidCount, humanCount, teamMap);
+}
+
+function renderAuction(bulls, bidCount, humanCount, teamMap) {
+  const tbody = document.getElementById('tbodyBulls');
+  tbody.innerHTML = '';
+  bulls.forEach(b => {
+    const fIdx = 1.0; // anchored in DB; range is 0.7x to 1.5x of anchor
+    const lo = Math.round(b.anchor * 0.70);
+    const hi = Math.round(b.anchor * 1.50);
+    const tr = document.createElement('tr');
+    const winnerName = b.winner_team ? (teamMap[b.winner_team] ? esc(teamMap[b.winner_team].name) : b.winner_team) : '';
+    tr.innerHTML =
+      `<td>${esc(b.name || b.sire)}${b.name ? ' <span style="color:var(--muted);font-size:0.78rem">by ' + esc(b.sire) + '</span>' : ''}</td>` +
+      `<td><span class="tag tag-${b.tier}">${b.tier}</span></td>` +
+      `<td>$${Math.round(b.anchor).toLocaleString()}</td>` +
+      `<td>$${lo.toLocaleString()} to $${hi.toLocaleString()}</td>` +
+      `<td>${(bidCount[b.id] || 0)} / ${humanCount}</td>` +
+      `<td>${b.winner_team ? winnerName : '<em>pending</em>'}</td>` +
+      `<td>${b.price ? '$' + Math.round(b.price).toLocaleString() : ''}</td>`;
+    tbody.appendChild(tr);
+  });
+
+  const allResolved = bulls.length > 0 && bulls.every(b => b.winner_team !== null || b.price === null);
+  document.getElementById('btnNextYear').style.display = allResolved ? '' : 'none';
+  document.getElementById('auctionStatus').textContent = allResolved
+    ? 'Auction resolved. Review results, then advance to next year.'
+    : 'Collecting sealed bids from human teams.';
+}
+
+// ---- Resolve auction ----
+async function resolveAuction() {
+  document.getElementById('btnResolve').disabled = true;
+  const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
+  const world = gRow.world;
+
+  const [{ data: bulls }, { data: bids }, { data: teams }] = await Promise.all([
+    supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR),
+    supa.from('bids').select('*').in('bull_id', BULLS.map(b => b.id)),
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+  ]);
+  TEAMS = teams || [];
+
+  const bullById = Object.fromEntries((bulls || []).map(b => [b.id, b]));
+  const bidsByBull = {};
+  (bids || []).forEach(bid => {
+    if (!bidsByBull[bid.bull_id]) bidsByBull[bid.bull_id] = [];
+    bidsByBull[bid.bull_id].push(bid);
+  });
+
+  for (const bull of (bulls || [])) {
+    const humanBids = bidsByBull[bull.id] || [];
+    // Add AI bids using engine bidding logic
+    const yearsLeft = RanchEngine.YEARS - CUR_YEAR + 1;
+    const aiBids = [];
+    for (const team of TEAMS.filter(t => t.is_ai && t.state)) {
+      const state = reviveState(team.state);
+      const arch  = RanchEngine.ARCHETYPES[team.archetype];
+      if (!arch || arch.bidCashCap <= 0) continue;
+      const activeN = (state.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length;
+      const rosterCap = state.rosterCap || 4;
+      if (activeN >= rosterCap) continue;
+      const bullObj = { catalog: bull.catalog, truth: bull.truth, tier: bull.tier,
+                        tierIdx: RanchEngine.TIER.findIndex(x => x.key === bull.tier) };
+      const est = RanchEngine.bullEstValue(state, world, bullObj, yearsLeft);
+      const noise = Math.exp((Math.random() * 2 - 1) * (arch.estNoise || 0.16));
+      const bid = Math.min(est * arch.shade * noise, state.cash * arch.bidCashCap);
+      if (bid >= bull.reserve) aiBids.push({ team_id: team.id, amount: bid });
+    }
+
+    // Merge human + AI bids, pick winner
+    const allBids = [
+      ...humanBids.map(b => ({ team_id: b.team_id, amount: Number(b.amount) })),
+      ...aiBids,
+    ].filter(b => b.amount >= bull.reserve);
+
+    if (!allBids.length) continue;
+    allBids.sort((a, b2) => b2.amount - a.amount);
+    const winner = allBids[0];
+
+    await supa.from('bulls').update({ winner_team: winner.team_id, price: winner.amount }).eq('id', bull.id);
+
+    // Deduct from winner's state cash
+    const winTeam = TEAMS.find(t => t.id === winner.team_id);
+    if (winTeam && winTeam.state) {
+      const st = reviveState(winTeam.state);
+      st.cash -= winner.amount;
+      st.bulls = st.bulls || [];
+      st.bulls.push({ truth: bull.truth, tier: bull.tier, boughtYear: CUR_YEAR,
+                      paid: winner.amount, covHead: st.herd * RanchEngine.bullCoverage(st), realized: 0 });
+      await supa.from('teams').update({ state: JSON.parse(JSON.stringify(st, setReplacer)) }).eq('id', winner.team_id);
+      await logDecision(winner.team_id, 'auction_resolved', {
+        bull_id: bull.id, price: winner.amount, tier: bull.tier, year: CUR_YEAR
+      });
+    }
+  }
+
+  // Run production year for all teams
+  await runProductionYear(world);
+
+  await supa.from('games').update({ phase: 'resolve' }).eq('id', GAME_ID);
+  await logDecision(null, 'phase_advanced', { from: 'auction', to: 'resolve', year: CUR_YEAR });
+
+  setPhaseChip('resolve');
+  msg('Auction resolved. Production year complete.', 'ok');
+  document.getElementById('btnResolve').disabled = false;
+  refreshAuction();
+  renderLeaderboard();
+}
+
+async function runProductionYear(world) {
+  const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
+  for (const team of (teams || [])) {
+    if (!team.state) continue;
+    const st = reviveState(team.state);
+    const w2 = Object.assign({}, world, { year: CUR_YEAR });
+    // Operational decisions (decideYear for AI, board choices for humans) already ran in
+    // the board phase before the auction. Resolution only runs the production year.
+    RanchEngine.productionYear(st, w2);
+    const opEq = RanchEngine.equity(st, w2) - (st.cash0 || 0);
+    st.peakEquity = Math.max(st.peakEquity || 0, opEq);
+    st.maxDrawdown = Math.max(st.maxDrawdown || 0,
+      (st.peakEquity - opEq) / Math.max(300000, st.peakEquity));
+    await supa.from('teams').update({ state: JSON.parse(JSON.stringify(st, setReplacer)) }).eq('id', team.id);
+  }
+}
+
+// ---- Advance to next year ----
+async function nextYear() {
+  const { data: gRow } = await supa.from('games').select('world,year').eq('id', GAME_ID).single();
+  const world = gRow.world;
+  CUR_YEAR = gRow.year;
+
+  if (CUR_YEAR >= RanchEngine.YEARS) {
+    await supa.from('games').update({ status: 'done', phase: 'ended' }).eq('id', GAME_ID);
+    await logDecision(null, 'phase_advanced', { from: 'resolve', to: 'ended' });
+    setPhaseChip('ended');
+    msg('Game over! Final leaderboard shown.', 'ok');
+    renderLeaderboard();
+    return;
+  }
+
+  // Open the next year's board meeting (which then leads into the auction)
+  document.getElementById('btnNextYear').style.display = 'none';
+  await openYear();
+}
+
+// ---- Leaderboard ----
+function setMetric(m) {
+  lb_metric = m;
+  ['Cash','Herd','Rep'].forEach(n => {
+    document.getElementById('btnMet' + n).classList.toggle('active', m === n.toLowerCase());
+  });
+  document.getElementById('lbMetricHeader').textContent = m === 'cash' ? 'Cash' : m === 'herd' ? 'Herd' : 'Reputation';
+  renderLeaderboard();
+}
+
+async function renderLeaderboard() {
+  const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
+  if (!teams || !teams.length) return;
+
+  const rows = teams.map(t => {
+    const st = t.state ? reviveState(t.state) : null;
+    let val = 0;
+    if (st) {
+      if (lb_metric === 'cash') val = st.cash;
+      else if (lb_metric === 'herd') val = st.herd;
+      else val = st.rep || 0;
+    }
+    return { name: t.name, val, is_ai: t.is_ai };
+  }).sort((a, b) => b.val - a.val);
+
+  const maxVal = Math.max(...rows.map(r => r.val), 1);
+  const tbody = document.getElementById('tbodyLB');
+  tbody.innerHTML = '';
+  rows.forEach((r, i) => {
+    const tr = document.createElement('tr');
+    const barW = Math.max(2, Math.round(r.val / maxVal * 120));
+    const dispVal = lb_metric === 'herd'
+      ? r.val.toFixed(0) + ' hd'
+      : lb_metric === 'rep'
+        ? r.val.toFixed(0)
+        : '$' + Math.round(r.val).toLocaleString();
+    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.name)}${r.is_ai ? ' <span class="tag tag-ai">AI</span>' : ''}</td>` +
+      `<td>${dispVal}</td><td><span class="lb-bar" style="width:${barW}px"></span></td>`;
+    tbody.appendChild(tr);
+  });
+  document.getElementById('secLeaderboard').style.display = '';
+}
+
+// ---- Utilities ----
+function reviveState(st) {
+  if (!st) return null;
+  const obj = JSON.parse(JSON.stringify(st));
+  // Revive Set from serialized { __type:'Set', values:[] }
+  if (obj.tech && obj.tech.__type === 'Set') obj.tech = new Set(obj.tech.values);
+  else if (Array.isArray(obj.tech)) obj.tech = new Set(obj.tech);
+  else obj.tech = new Set();
+  // Reattach the live archetype object: JSON strips its functions (techRule), which
+  // decideYear needs. Without this, decideYear throws and AI operations silently no-op.
+  if (obj.key && RanchEngine.ARCHETYPES[obj.key]) obj.a = RanchEngine.ARCHETYPES[obj.key];
+  return obj;
+}
+
+async function logDecision(teamId, kind, payload) {
+  if (!GAME_ID) return;
+  await supa.from('decisions').insert({
+    game_id: GAME_ID, team_id: teamId || null,
+    year: CUR_YEAR, kind, payload,
+  });
+}
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+// ---- Polling fallback ----
+function startPolling() {
+  if (pollTimer) clearInterval(pollTimer); // never stack intervals across phases
+  pollTimer = setInterval(() => {
+    if (document.getElementById('secLobby').style.display !== 'none') refreshTeams();
+    if (document.getElementById('secMarket').style.display !== 'none') refreshRanches();
+    if (document.getElementById('secBoard').style.display !== 'none') refreshBoard();
+    if (document.getElementById('secAuction').style.display !== 'none') refreshAuction();
+  }, POLL_MS);
+}
+</script>
+</body>
+</html>
