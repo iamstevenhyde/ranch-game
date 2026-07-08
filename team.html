@@ -154,6 +154,7 @@
   <section id="secBoard" style="display:none">
     <h2>Board Meeting <span id="boardYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
     <div class="card">
+      <div id="boardRecap"></div>
       <div id="boardBanner" class="board-banner"></div>
       <div class="board-top">
         <div>
@@ -361,48 +362,53 @@ function subscribeToGame() {
     }).subscribe();
 }
 
+// Every screen section, so one place controls what is visible. handlePhaseChange hides
+// ALL of these and then shows only the ones the current phase owns. This kills the old
+// bug where realtime + the 4s poll both fired and sections accumulated (board buried
+// under last year's results, the board appearing "skipped").
+const ALL_SECTIONS = ['secLobbyWait', 'secMarket', 'secStats', 'secBoard', 'secAuction', 'secWon', 'secStandings'];
+function showOnly(ids) {
+  const keep = new Set(ids);
+  ALL_SECTIONS.forEach(id => { const e = document.getElementById(id); if (e) e.style.display = keep.has(id) ? '' : 'none'; });
+}
+// monotonic guard: an async paint (showResults, refreshBoard) that finishes AFTER a
+// newer phase has taken over must not leak its section onto the newer screen.
+let PHASE_SEQ = 0;
+function phaseStale(myPhase, mySeq) { return mySeq !== PHASE_SEQ || PHASE !== myPhase; }
+
 async function handlePhaseChange(game) {
+  // ignore a stale event (poll firing an older phase than the one we already moved to)
+  if (game.phase === PHASE && game.year === CUR_YEAR && game.phase !== 'lobby') return;
   PHASE    = game.phase;
   CUR_YEAR = game.year;
+  const seq = ++PHASE_SEQ;
   setPhaseChip(PHASE);
 
   if (PHASE === 'market') {
-    document.getElementById('secLobbyWait').style.display = 'none';
     document.getElementById('archetypeLabel').textContent = RanchEngine.ARCHETYPES[ARCHETYPE]?.label || ARCHETYPE;
-    document.getElementById('secMarket').style.display = '';
+    showOnly(['secMarket', 'secStats']);
     await refreshMarket();
     await refreshMyStats();
   } else if (PHASE === 'board') {
-    document.getElementById('secMarket').style.display = 'none';
-    document.getElementById('secAuction').style.display = 'none';
-    document.getElementById('secWon').style.display = 'none';
-    document.getElementById('secStats').style.display = '';
-    document.getElementById('secBoard').style.display = '';
+    showOnly(['secStats', 'secBoard']);
     document.getElementById('boardYearLabel').textContent = 'Year ' + CUR_YEAR;
     await refreshBoard(game.world);
     await refreshMyStats();
   } else if (PHASE === 'auction') {
-    document.getElementById('secBoard').style.display = 'none';
-    document.getElementById('secMarket').style.display = 'none';
-    document.getElementById('secStats').style.display = '';
-    document.getElementById('secAuction').style.display = '';
+    showOnly(['secStats', 'secAuction']);
     document.getElementById('auctionYearLabel').textContent = 'Year ' + CUR_YEAR;
     submittedBids = {};
     await refreshAuction(game.world);
     await refreshMyStats();
   } else if (PHASE === 'resolve') {
-    // clearly switch off the auction/board view so the player sees the outcome
-    document.getElementById('secBoard').style.display = 'none';
-    document.getElementById('secAuction').style.display = 'none';
-    document.getElementById('secMarket').style.display = 'none';
-    document.getElementById('secStats').style.display = '';
+    showOnly(['secStats', 'secWon', 'secStandings']);
     await showResults(game.world);
+    if (phaseStale('resolve', seq)) return; // a newer phase already took over
     await refreshMyStats();
     await refreshStandings();
     window.scrollTo(0, 0);
   } else if (PHASE === 'ended') {
-    document.getElementById('secAuction').style.display = 'none';
-    document.getElementById('secBoard').style.display = 'none';
+    showOnly(['secWon', 'secStandings']);
     await showResults(game.world);
     await refreshStandings();
     setPhaseChip('ended');
@@ -565,6 +571,21 @@ async function refreshBoard(world) {
   boardSemen = (boardWorld && boardWorld.semenCatalog) || [];
   const st = boardBaseSt, w = boardWorld, reg = RanchEngine.REGIONS[st.region];
   const sev = RanchEngine.droughtSeverity(w, st.region);
+
+  // Last-year recap strip: carries the Cattlemen's Weekly headline onto the board so the
+  // flow reads continuously (how last year closed -> decide this year), even if the
+  // instructor advanced quickly past the results screen. Year 1 has no prior year.
+  const recapEl = document.getElementById('boardRecap');
+  if (st.lastStmt && CUR_YEAR > 1) {
+    const s = st.lastStmt;
+    recapEl.innerHTML =
+      `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--sage);border-radius:0 5px 5px 0;padding:0.5rem 0.75rem;margin-bottom:0.7rem;font-size:0.8rem;color:var(--dim)">` +
+      `<span style="font-family:var(--mono);font-size:0.66rem;color:var(--sage);letter-spacing:0.08em;text-transform:uppercase">Last year closed</span> ` +
+      `Net <strong style="color:${s.net >= 0 ? 'var(--sand)' : '#d99079'}">${money(s.net)}</strong>, ` +
+      `now <strong style="color:var(--sand)">${st.herd.toLocaleString()}</strong> head, ` +
+      `cash <strong style="color:var(--sand)">$${Math.round(st.cash).toLocaleString()}</strong>, ` +
+      `${g('dollarBeef', '$Beef')} <strong style="color:var(--sand)">${RanchEngine.dollarBeef(st.g)}</strong>. Set this year\'s plan below.</div>`;
+  } else { recapEl.innerHTML = ''; }
 
   // Situation banner (Frostpunk directional framing, colored by drought severity)
   const droughtWord = { mild: 'dry but manageable', moderate: 'moderate drought', severe: 'severe drought' }[w.drought] || w.drought;
@@ -1097,7 +1118,8 @@ async function showResults(world) {
   html += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem">Waiting for the instructor to advance to the next year.</div>`;
 
   document.getElementById('cardWon').innerHTML = html;
-  document.getElementById('secWon').style.display = '';
+  // visibility is owned by showOnly() in handlePhaseChange; do not force it here or a
+  // slow paint could re-show this section on a newer phase's screen
 }
 
 // ---- Your Books: the income statement (does the money flow make sense?) and the
@@ -1229,7 +1251,7 @@ async function refreshStandings() {
       `<td><span class="lb-bar" style="width:${barW}px"></span></td>`;
     tbody.appendChild(tr);
   });
-  document.getElementById('secStandings').style.display = '';
+  // visibility owned by showOnly(); refreshStandings only updates the data
 }
 
 // ---- Polling fallback ----
@@ -1238,7 +1260,7 @@ function startPolling() {
     if (!GAME_ID) return;
     const { data: game } = await supa.from('games').select('*').eq('id', GAME_ID).single();
     if (!game) return;
-    if (game.phase !== PHASE) await handlePhaseChange(game);
+    if (game.phase !== PHASE || game.year !== CUR_YEAR) await handlePhaseChange(game);
     else {
       if (PHASE === 'market') await refreshMarket();
       if (PHASE === 'auction') await refreshAuction(game.world);
