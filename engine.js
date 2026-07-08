@@ -202,6 +202,42 @@ function buySemen(r, w, item) {
   return true;
 }
 
+// ---------- semen SELL side (7/08, Steven): your proven bull as a revenue asset ----------
+// A team that OWNS a proven bull (elite or premium only, the tiers with a real AI market)
+// can open him to semen sales. There is a per-season program fee (collection, housing,
+// marketing, the "prove and list" cost) and the owner sets the price per straw ($5-$100).
+// Demand is a real curve: higher genetic merit ($Beef of his TRUE traits) and a stronger
+// brand (reputation) lift the demand pool, and price cuts into volume. Crucially the
+// demand ELASTICITY depends on quality: an elite, brand-proven sire is inelastic (buyers
+// pay up, so price high), a marginal premium bull is elastic (price low or the market
+// walks). The revenue-maximizing price therefore depends on WHAT you own, the pricing
+// lesson the seedstock strategy is built to teach.
+const SEMEN_SELL = { baseStraws: 260, elasticBase: 1.15, elasticQuality: 0.62,
+                     programFee: 2000, minPrice: 5, maxPrice: 100 };
+function canSellSemen(bull) { return bull && (bull.tier === 'elite' || bull.tier === 'premium'); }
+// straws sold + gross at a given price, given the bull and the owner's brand
+function semenDemand(r, w, bull, price) {
+  const qb = dollarBeef(bull.truth);                       // true genetic merit ($Beef)
+  const qClamp = clamp((qb - 90) / 110, 0.05, 1);
+  const tierMult = bull.tier === 'elite' ? 1.0 : 0.5;
+  const repMult = clamp(r.rep / 60, 0.3, 1.5);             // brand sells straws
+  const D0 = SEMEN_SELL.baseStraws * qClamp * tierMult * repMult
+             * Math.pow(w.feederIdx, FEEDER_ELASTICITY);   // demand at the $5 reference price
+  const P = clamp(price, SEMEN_SELL.minPrice, SEMEN_SELL.maxPrice);
+  const elast = SEMEN_SELL.elasticBase - SEMEN_SELL.elasticQuality * qClamp; // elite ~0.53, marginal ~1.1
+  const straws = Math.min(D0, D0 * Math.pow(SEMEN_SELL.minPrice / P, elast));
+  return { straws, gross: straws * P, elast, price: P };
+}
+// the price a rational owner would set: inelastic (elite/proven) -> charge up; elastic
+// (marginal) -> keep it cheap. Used by AI teams and offered to humans as the hint.
+function bestSemenPrice(r, w, bull) {
+  const qb = dollarBeef(bull.truth);
+  const qClamp = clamp((qb - 90) / 110, 0.05, 1);
+  const elast = SEMEN_SELL.elasticBase - SEMEN_SELL.elasticQuality * qClamp;
+  // revenue ~ P^(1-elast): rises with price when elast<1, falls when elast>1
+  return elast < 0.98 ? 85 : elast > 1.02 ? 12 : 40;
+}
+
 // drought Markov chain (2013-2025 western DSI)
 const DROUGHT_T = {
   mild:     { severe: 0.15, moderate: 0.35 },
@@ -538,11 +574,18 @@ function productionYear(r, w) {
   const activeN = r.bulls.filter(b => w.year - b.boughtYear < 4).length;
   const commodityBullCost = Math.max(0, r.herd / 100 - activeN * 0.25) * 4000
                           * Math.pow(w.feederIdx, FEEDER_ELASTICITY);
-  // AI-stud royalties: an active ELITE bull's straws sell into the national program,
-  // and reputation prices them (proven brand moves semen). A make-side income line.
-  const eliteN = r.bulls.filter(b => b.tier === 'elite' && w.year - b.boughtYear < 4).length;
-  const semenRoyalty = eliteN * 1800 * clamp(r.rep / 60, 0.3, 1.3) * Math.pow(w.feederIdx, FEEDER_ELASTICITY);
-  r.semenRoyalty = semenRoyalty;
+  // Semen SALES: for each active proven bull the owner opened to sales (b.semenPrice set),
+  // the national AI market buys straws off the demand curve. Net of the program fee. This
+  // replaced the old flat royalty: revenue is now the owner's pricing decision.
+  let semenRoyalty = 0, semenStraws = 0;
+  for (const b of r.bulls) {
+    if (w.year - b.boughtYear >= 4 || !b.semenPrice || !canSellSemen(b)) continue;
+    const d = semenDemand(r, w, b, b.semenPrice);
+    semenRoyalty += d.gross - SEMEN_SELL.programFee;
+    semenStraws += Math.round(d.straws);
+    b.lastStraws = Math.round(d.straws); b.lastSemenRev = Math.round(d.gross - SEMEN_SELL.programFee);
+  }
+  r.semenRoyalty = semenRoyalty; r.semenStraws = semenStraws;
   const cowCostTot = cowCost(r, w) * r.herd, laborTot = laborCost(r, w);
   const overhead = 35000, interest = r.debt * (w.rateHikeYears > 0 ? 0.13 : 0.07);
   // fixed overhead (equipment, insurance, facilities) is lumpy: small outfits pay it too
@@ -553,7 +596,7 @@ function productionYear(r, w) {
   r.revHist.push(net);
   // income statement snapshot for the balance-sheet card (display only; the math above
   // is the source of truth). Rounded at render time, not here.
-  r.lastStmt = { year: w.year, revenue, semenRoyalty, cowCost: cowCostTot * lean, labor: laborTot * lean,
+  r.lastStmt = { year: w.year, revenue, semenRoyalty, semenStraws, cowCost: cowCostTot * lean, labor: laborTot * lean,
                  overhead, bullCost: commodityBullCost, breeding: extraCost, interest, net,
                  calves: Math.round(calves), lbs: Math.round(lbs) };
   // genetics evolve toward active bulls' true traits, plus any AI semen program bought
@@ -642,6 +685,13 @@ function decideYear(r, w) {
   // tech adoption: one per year if policy triggers and cash allows.
   // The tech shelf is year-gated (UNLOCKS.tech): nobody adopts before it opens.
   if (w.year < UNLOCKS.tech) return;
+  // semen SALES: open every proven owned bull to straw sales at its revenue-maximizing
+  // price. Free money above the fee once you own an elite/premium sire, so any AI does it.
+  for (const b of r.bulls) {
+    if (w.year - b.boughtYear >= 4 || !canSellSemen(b)) continue;
+    const p = bestSemenPrice(r, w, b);
+    if (semenDemand(r, w, b, p).gross > SEMEN_SELL.programFee) b.semenPrice = p; else b.semenPrice = 0;
+  }
   // AI-semen: genetics-led archetypes buy proven straws when they are NOT winning bulls
   // at auction (the make-vs-buy hedge). Cheaper per unit, but the conception gamble is
   // priced into how much it moves the herd. Bull-focused buyers skip it.
@@ -821,6 +871,10 @@ if (typeof window !== 'undefined') {
     dollarBeef,
     makeSemenCatalog,
     buySemen,
+    SEMEN_SELL,
+    canSellSemen,
+    semenDemand,
+    bestSemenPrice,
     DROUGHT_T,
     SHOCKS,
     TRAITS,
@@ -870,6 +924,10 @@ if (typeof window !== 'undefined') {
     dollarBeef,
     makeSemenCatalog,
     buySemen,
+    SEMEN_SELL,
+    canSellSemen,
+    semenDemand,
+    bestSemenPrice,
     DROUGHT_T,
     SHOCKS,
     TRAITS,

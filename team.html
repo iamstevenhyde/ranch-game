@@ -183,16 +183,17 @@
         <div id="techPills"></div>
       </div>
       <div class="dec-block">
-        <div class="dec-head">Genetics Program</div>
+        <div class="dec-head">Buy Genetics (AI semen)</div>
         <div class="dec-sub">Buy proven AI semen instead of chasing a bull at auction. Cheaper, but it does not always settle.</div>
         <div id="semenOffers"></div>
       </div>
+      <div class="dec-block">
+        <div class="dec-head">Sell Genetics (your bulls)</div>
+        <div class="dec-sub">Open a proven bull you own to the national semen market and set your price per straw. Demand follows quality and price.</div>
+        <div id="semenSell"></div>
+      </div>
 
       <div class="consequence" id="boardConsequence"></div>
-      <div class="row" style="margin-top:0.8rem">
-        <button id="btnSubmitBoard" onclick="submitBoard()">Lock In Operations</button>
-        <span class="status" id="boardMsg">You can revise until the instructor opens the auction.</span>
-      </div>
     </div>
   </section>
 
@@ -212,19 +213,24 @@
     </div>
   </section>
 
-  <!-- Auction: submit bids -->
+  <!-- Auction: enter bids (same page as operations; one lock-in below) -->
   <section id="secAuction" style="display:none">
-    <h2>Sealed-Bid Auction <span id="auctionYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <h2>Sealed-Bid Bull Sale <span id="auctionYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
     <div class="card">
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:0.7rem">
-        Submit a max bid per bull. Bids are sealed until the instructor resolves, and you
-        can revise a bid until then. You win each bull you top, up to your herd sire slots,
-        so bid where the traits fit your herd and your objective.
+        Enter a max bid per bull. You win each bull you top, up to your herd sire slots. Your
+        bids draw on the cash left <strong>after</strong> the operations above, so set your plan
+        first. Nothing is final until you lock in the year, and you can revise until the
+        instructor resolves.
       </p>
       <div id="auctionHerd" style="margin-bottom:0.9rem"></div>
       <div id="bullCards"></div>
       <!-- sticky exposure HUD: stays pinned to the viewport bottom while scrolling lots -->
       <div id="auctionExposure" class="consequence"></div>
+      <div class="row" style="margin-top:0.9rem;display:flex;align-items:center;gap:0.8rem">
+        <button id="btnLockYear" onclick="submitPlay()">Lock In Year</button>
+        <span class="status" id="lockMsg" style="font-size:0.82rem;color:var(--muted)">Locks your operations and all bids together. Revise anytime until the year resolves.</span>
+      </div>
       <p style="font-size:0.62rem;color:var(--muted);margin-top:0.8rem;font-family:var(--mono)">
         Bull photos are representative stock images, not the specific lots. Sources: USDA (public domain) and
         Wikimedia Commons contributors under CC BY / CC BY-SA. Full attribution in assets/bulls/LICENSE.md.
@@ -389,15 +395,15 @@ async function handlePhaseChange(game) {
     showOnly(['secMarket', 'secStats']);
     await refreshMarket();
     await refreshMyStats();
-  } else if (PHASE === 'board') {
-    showOnly(['secStats', 'secBoard']);
+  } else if (PHASE === 'board' || PHASE === 'auction') {
+    // COMBINED year page: operations (secBoard) and the sealed-bid sale (secAuction) on
+    // one screen, locked in together. The game only uses 'board' now; 'auction' is kept
+    // as a safe alias for any in-flight game.
+    showOnly(['secStats', 'secBoard', 'secAuction']);
     document.getElementById('boardYearLabel').textContent = 'Year ' + CUR_YEAR;
-    await refreshBoard(game.world);
-    await refreshMyStats();
-  } else if (PHASE === 'auction') {
-    showOnly(['secStats', 'secAuction']);
     document.getElementById('auctionYearLabel').textContent = 'Year ' + CUR_YEAR;
     submittedBids = {};
+    await refreshBoard(game.world);
     await refreshAuction(game.world);
     await refreshMyStats();
   } else if (PHASE === 'resolve') {
@@ -509,8 +515,28 @@ const ST_PATHS = {
 };
 const ST_LBL = { OR: { x: 90, y: 140 }, ID: { x: 210, y: 190 }, MT: { x: 312, y: 88 }, WY: { x: 358, y: 192 }, CO: { x: 374, y: 298 }, NV: { x: 96, y: 292 }, UT: { x: 212, y: 336 } };
 
-let boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null };
+let boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null, semenSell: {} };
 let boardBaseSt = null, boardWorld = null, boardSemen = [];
+
+// the ranch as it WILL be after this year's operations are applied (from the year
+// snapshot), so the bid exposure and consequence lines draw on post-operations cash
+function projectedRanch() {
+  if (!boardBaseSt || !boardWorld) return null;
+  const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
+  const n = choiceNumbers();
+  applyDecisions(r, boardWorld, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
+  applySemenSell(r);
+  return r;
+}
+// set b.semenPrice on owned proven bulls from this year's sell choices (reset first so a
+// bull not opened this season is closed; the program fee is per-year)
+function applySemenSell(r) {
+  (r.bulls || []).forEach(b => { if (RanchEngine.canSellSemen(b)) b.semenPrice = 0; });
+  for (const [i, price] of Object.entries(boardChoice.semenSell || {})) {
+    const b = r.bulls && r.bulls[i];
+    if (b && RanchEngine.canSellSemen(b)) b.semenPrice = RanchEngine.clamp(Number(price) || 0, 5, 100);
+  }
+}
 
 function boardKey() { return 'board_' + GAME_ID + '_' + TEAM_ID + '_' + CUR_YEAR; }
 function droughtColor(sev) { return sev >= 1.0 ? '#9b3a1a' : sev >= 0.5 ? '#c98a2b' : '#6b7c5c'; }
@@ -567,7 +593,7 @@ async function refreshBoard(world) {
   if (!baseRaw) { baseRaw = JSON.stringify(team.state); localStorage.setItem(boardKey(), baseRaw); }
   boardBaseSt = reviveState(JSON.parse(baseRaw));
   boardWorld = world || RanchEngine.newWorld();
-  boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null };
+  boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null, semenSell: {} };
   boardSemen = (boardWorld && boardWorld.semenCatalog) || [];
   const st = boardBaseSt, w = boardWorld, reg = RanchEngine.REGIONS[st.region];
   const sev = RanchEngine.droughtSeverity(w, st.region);
@@ -603,21 +629,77 @@ async function refreshBoard(world) {
   document.getElementById('boardMandate').innerHTML =
     `You run the <strong>${arch.label}</strong>. Your investors are scored on <strong>${topKpis.join('</strong> and <strong>')}</strong>.`;
 
-  // Where you stand: real bars with the live VALUE shown so change is visible year to year
-  const gAvg = RanchEngine.avg(RanchEngine.TRAITS.map(t => st.g[t]));
-  const cash0 = st.cash0 || st.cash || 1, herd0 = st.herd0 || st.herd;
+  // Where you stand: value-anchored bars (mapped to an absolute scale, not a baseline
+  // delta) so they show a real position that moves every year, including year 1.
+  const db = RanchEngine.dollarBeef(st.g);
+  const herd0 = st.herd0 || st.herd, cap = st.landCap || herd0 * 1.5;
+  const stake = RanchEngine.START_CASH || 6500000;
   const bars = [
-    { key: 'genetics', name: 'Genetics', pct: RanchEngine.clamp(gAvg / 8, 0, 1), val: gAvg.toFixed(1) },
-    { key: 'herdGrowth', name: 'Herd', pct: RanchEngine.clamp(st.herd / herd0, 0.4, 1.6) / 1.6, val: st.herd.toLocaleString() + ' (' + (st.herd >= herd0 ? '+' : '') + Math.round((st.herd / herd0 - 1) * 100) + '%)' },
-    { key: 'cash', name: 'Cash', pct: RanchEngine.clamp(st.cash / cash0, 0, 1.3) / 1.3, val: '$' + (st.cash / 1e6).toFixed(2) + 'M (' + (st.cash >= cash0 ? '+' : '') + Math.round((st.cash / cash0 - 1) * 100) + '%)' },
+    { key: 'genetics', name: '$Beef', pct: RanchEngine.clamp((db - 50) / 150, 0.02, 1),
+      val: db + ' index', tip: 'dollarBeef' },
+    { key: 'herdGrowth', name: 'Herd', pct: RanchEngine.clamp(st.herd / cap, 0.02, 1),
+      val: st.herd.toLocaleString() + ' / ' + cap.toLocaleString() + ' cap' },
+    { key: 'cash', name: 'Cash', pct: RanchEngine.clamp(st.cash / stake, 0.02, 1),
+      val: '$' + (st.cash / 1e6).toFixed(2) + 'M' },
   ];
   document.getElementById('boardKpis').innerHTML = bars.map(b =>
-    `<div class="kpi-row"><span class="kpi-name">${b.name}</span>` +
+    `<div class="kpi-row"><span class="kpi-name">${b.tip ? g(b.tip, b.name) : b.name}</span>` +
     `<span class="kpi-track"><span class="kpi-fill ${arch.kpi[b.key] ? 'pri' : ''}" style="width:${Math.round(b.pct * 100)}%"></span></span>` +
     `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`
   ).join('');
 
-  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers();
+  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell();
+  updateConsequence();
+}
+
+// ---- Sell genetics: open owned proven bulls to the national semen market ----
+function renderSemenSell() {
+  const el = document.getElementById('semenSell'); if (!el) return;
+  const st = boardBaseSt;
+  if (CUR_YEAR < RanchEngine.UNLOCKS.tech) { el.innerHTML = lockedNote('Semen sales open in year ' + RanchEngine.UNLOCKS.tech + ', with the genetics vendors.'); return; }
+  const eligible = (st.bulls || []).map((b, i) => ({ b, i })).filter(x => (CUR_YEAR - x.b.boughtYear < 4) && RanchEngine.canSellSemen(x.b));
+  if (!eligible.length) { el.innerHTML = '<span style="color:var(--muted);font-size:0.82rem">You own no proven bulls (elite or premium) to collect semen from yet. Win one at the sale.</span>'; return; }
+  el.innerHTML = eligible.map(({ b, i }) => {
+    const db = RanchEngine.dollarBeef(b.truth);
+    const best = RanchEngine.bestSemenPrice(st, boardWorld, b);
+    const cur = boardChoice.semenSell[i];
+    const open = cur != null && cur > 0;
+    const price = open ? cur : best;
+    const demo = RanchEngine.semenDemand(st, boardWorld, b, price);
+    const net = Math.round(demo.gross - RanchEngine.SEMEN_SELL.programFee);
+    return `<div style="border:1px solid var(--border);border-radius:5px;padding:0.55rem 0.7rem;margin-bottom:0.4rem;background:var(--surface2)">
+      <div style="display:flex;align-items:baseline;gap:0.5rem;font-size:0.84rem;flex-wrap:wrap">
+        <strong>${esc(b.name || b.sire || 'Your bull')}</strong>
+        <span class="tag tag-${b.tier}">${b.tier}</span>
+        <span style="color:var(--dim);font-size:0.76rem">${g('dollarBeef', '$B')} ${db}</span>
+        <label style="margin-left:auto;font-size:0.78rem;color:var(--dim);cursor:pointer"><input type="checkbox" ${open ? 'checked' : ''} onchange="toggleSemenSell(${i},this.checked)"> sell semen</label>
+      </div>
+      <div id="sellrow_${i}" style="margin-top:0.4rem;${open ? '' : 'display:none'}">
+        <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem">
+          <span style="color:var(--dim)">$/straw</span>
+          <input type="number" min="5" max="100" value="${price}" style="width:78px;margin:0" oninput="setSemenPrice(${i},this.value)">
+          <span style="color:var(--muted)">suggested $${best}</span>
+        </div>
+        <div id="selldemo_${i}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem">${semenSellDemoText(demo, net)}</div>
+      </div>
+    </div>`;
+  }).join('');
+}
+function semenSellDemoText(demo, net) {
+  return `~${Math.round(demo.straws)} straws, net <b style="color:${net >= 0 ? 'var(--sand)' : '#d99079'}">${money(net)}</b> after the $${RanchEngine.SEMEN_SELL.programFee.toLocaleString()} program fee`;
+}
+function toggleSemenSell(i, on) {
+  if (on) boardChoice.semenSell[i] = RanchEngine.bestSemenPrice(boardBaseSt, boardWorld, boardBaseSt.bulls[i]);
+  else delete boardChoice.semenSell[i];
+  renderSemenSell(); updateConsequence();
+}
+function setSemenPrice(i, v) {
+  const p = RanchEngine.clamp(Number(v) || 0, 5, 100);
+  boardChoice.semenSell[i] = p;
+  const b = boardBaseSt.bulls[i];
+  const demo = RanchEngine.semenDemand(boardBaseSt, boardWorld, b, p);
+  const el = document.getElementById('selldemo_' + i);
+  if (el) el.innerHTML = semenSellDemoText(demo, Math.round(demo.gross - RanchEngine.SEMEN_SELL.programFee));
   updateConsequence();
 }
 
@@ -791,18 +873,21 @@ function setChoice(group, mode) {
 }
 
 function updateConsequence() {
-  const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
-  const w = boardWorld;
-  const n = choiceNumbers();
-  applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
-  const bidCeil = Math.round(r.cash * (r.a.bidCashCap || 0));
+  const r = projectedRanch();
+  if (!r) return;
   const el = document.getElementById('boardConsequence');
   el.innerHTML =
-    `<div>After these moves: <b>${r.herd.toLocaleString()}</b> head, ` +
+    `<div>After these operations: <b>${r.herd.toLocaleString()}</b> head, ` +
     `<b>$${Math.round(r.cash).toLocaleString()}</b> cash, ` +
     `<b>$${Math.round(r.debt).toLocaleString()}</b> debt. ` +
-    `You can commit up to <b>$${bidCeil.toLocaleString()}</b> to any one bull.</div>` +
+    `Your bids below draw on this cash.</div>` +
     `<div class="fit-note">${fitNote(r)}</div>`;
+  // the sale exposure and every bid line follow post-operations cash
+  AUCTION_CASH = r.cash;
+  const activeN = (r.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length;
+  AUCTION_SLOTS = Math.max(0, (r.rosterCap || 4) - activeN);
+  updateExposure();
+  document.querySelectorAll('#bullCards input[type=number]').forEach(i => { if (i.value) updateBidConseq(i.id.replace('bid_', '')); });
 }
 // Reigns-style strategic coach: is this year's plan aligned with the mandate?
 function fitNote(r) {
@@ -817,21 +902,54 @@ function fitNote(r) {
   return 'This plan reads consistent with your mandate. The auction is where you press the edge.';
 }
 
-async function submitBoard() {
-  if (!boardBaseSt) { msg('Board not ready, reopen the page.', 'err'); return; }
-  const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
-  const w = boardWorld;
-  const n = choiceNumbers();
-  applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
+// ONE lock-in for the whole year: apply operations to the ranch, then save every entered
+// bid, all against the same post-operations cash. Re-applies from the year snapshot each
+// time, so pressing Lock In again is idempotent (no double-spend on revise).
+async function submitPlay() {
+  if (!boardBaseSt) { msg('Page not ready, reopen it.', 'err'); return; }
+  document.getElementById('btnLockYear').disabled = true;
+  try {
+    const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
+    const w = boardWorld;
+    const n = choiceNumbers();
+    applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
+    applySemenSell(r);
 
-  const { error } = await supa.from('teams').update({ state: JSON.parse(JSON.stringify(r, setReplacer)) }).eq('id', TEAM_ID);
-  if (error) { msg('Could not save operations: ' + error.message, 'err'); return; }
-  await supa.from('decisions').insert(
-    { game_id: GAME_ID, team_id: TEAM_ID, year: CUR_YEAR, kind: 'board_submitted',
-      payload: { herd: boardChoice.herd, debt: boardChoice.debt, techs: boardChoice.techs, expandCows: n.expandCows, debtAction: n.debtAction } }
-  );
-  msg('Operations locked: herd ' + r.herd.toLocaleString() + ', cash $' + Math.round(r.cash).toLocaleString() + '. Revise anytime before the auction opens.', 'ok');
-  await refreshMyStats();
+    const { error } = await supa.from('teams').update({ state: JSON.parse(JSON.stringify(r, setReplacer)) }).eq('id', TEAM_ID);
+    if (error) { msg('Could not save operations: ' + error.message, 'err'); return; }
+
+    // gather bids: valid (>= reserve, <= post-ops cash) get upserted; empties get removed
+    const inputs = [...document.querySelectorAll('#bullCards input[type=number]')];
+    const upserts = [], removeIds = [];
+    let overCash = false;
+    for (const inp of inputs) {
+      const bullId = inp.id.replace('bid_', '');
+      const amt = Number(inp.value);
+      const reserve = Number(inp.getAttribute('data-reserve')) || 0;
+      if (amt >= reserve && amt > 0) {
+        if (amt > r.cash) overCash = true;
+        upserts.push({ bull_id: bullId, team_id: TEAM_ID, amount: amt });
+      } else {
+        removeIds.push(bullId);
+      }
+    }
+    if (upserts.length) {
+      const { error: be } = await supa.from('bids').upsert(upserts, { onConflict: 'bull_id,team_id' });
+      if (be) { msg('Bids error: ' + be.message, 'err'); return; }
+    }
+    if (removeIds.length) await supa.from('bids').delete().eq('team_id', TEAM_ID).in('bull_id', removeIds);
+
+    await supa.from('decisions').insert(
+      { game_id: GAME_ID, team_id: TEAM_ID, year: CUR_YEAR, kind: 'board_submitted',
+        payload: { herd: boardChoice.herd, debt: boardChoice.debt, techs: boardChoice.techs,
+                   semenSell: boardChoice.semenSell, bids: upserts.length, expandCows: n.expandCows, debtAction: n.debtAction } });
+
+    const warn = overCash ? ' Note: a bid tops your cash, so winning it would force a fire sale.' : '';
+    msg('Year locked: ' + r.herd.toLocaleString() + ' head, $' + Math.round(r.cash).toLocaleString() + ' cash, ' + upserts.length + ' bid' + (upserts.length === 1 ? '' : 's') + '. Revise until the year resolves.' + warn, 'ok');
+    await refreshMyStats();
+  } finally {
+    document.getElementById('btnLockYear').disabled = false;
+  }
 }
 
 // ---- Auction ----
@@ -885,10 +1003,12 @@ async function refreshAuction(world) {
     .in('bull_id', (bulls || []).map(b => b.id));
   const bidMap = {};
   (myBids || []).forEach(x => { bidMap[x.bull_id] = Number(x.amount); });
-  // stash what the consequence lines need (cash, open sire slots, lot count)
-  AUCTION_CASH = st ? st.cash : 0;
-  const activeN = st ? (st.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length : 0;
-  AUCTION_SLOTS = st ? Math.max(0, (st.rosterCap || 4) - activeN) : 0;
+  // exposure draws on post-OPERATIONS cash (projectedRanch) when the board is loaded, so
+  // planning to expand/adopt reduces what the HUD says you can bid
+  const proj = projectedRanch() || st;
+  AUCTION_CASH = proj ? proj.cash : 0;
+  const activeN = proj ? (proj.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length : 0;
+  AUCTION_SLOTS = proj ? Math.max(0, (proj.rosterCap || 4) - activeN) : 0;
   AUCTION_LOTS = (bulls || []).filter(b => !b.winner_team).length;
   renderHerdPanel(st);
   renderBullCards(bulls || [], world, st, bidMap);
@@ -991,12 +1111,12 @@ function renderBullCards(bulls, world, st, bidMap) {
       (b.winner_team
         ? `<div class="submitted" style="margin-top:0.4rem">Resolved</div>`
         : `<div class="bid-row" style="margin-top:0.4rem">` +
-            // in-progress typing wins over the saved bid so the poll never clobbers it
-            `<input type="number" id="bid_${b.id}" min="${Math.round(b.reserve)}" placeholder="Max bid ($)"` +
+            // one lock-in for the whole year, so bids are just entered here (no per-lot
+            // button); in-progress typing wins over the saved bid so a poll never clobbers it
+            `<input type="number" id="bid_${b.id}" data-reserve="${Math.round(b.reserve)}" min="${Math.round(b.reserve)}" placeholder="Max bid ($, min $${Math.round(b.reserve).toLocaleString()})"` +
               ` oninput="updateBidConseq('${b.id}')"` +
               (typed['bid_' + b.id] !== undefined ? ` value="${typed['bid_' + b.id]}"` : existing ? ` value="${Math.round(existing)}"` : '') + `>` +
-            `<button onclick="submitBid('${b.id}', ${b.reserve})">${existing ? 'Update Bid' : 'Submit Bid'}</button>` +
-            (existing ? ` <span class="submitted">Current: $${Math.round(existing).toLocaleString()}</span>` : '') +
+            (existing ? ` <span class="submitted">Locked: $${Math.round(existing).toLocaleString()}</span>` : '') +
           `</div>` +
           `<div id="conseq_${b.id}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem;min-height:1em"></div>`
       ) +
@@ -1145,7 +1265,7 @@ function booksCard(st, w) {
       `<div style="font-family:var(--mono);font-size:0.68rem;color:var(--accent);letter-spacing:0.08em;margin-bottom:0.3rem">INCOME STATEMENT</div>` +
       `<table class="bs-table" style="width:100%;font-size:0.8rem">` +
       row('Calf and beef sales', s.revenue) +
-      (s.semenRoyalty > 0 ? row('AI-stud royalties', s.semenRoyalty) : '') +
+      (s.semenRoyalty ? row('Semen sales, net' + (s.semenStraws ? ' (' + s.semenStraws.toLocaleString() + ' straws)' : ''), s.semenRoyalty) : '') +
       row('Cow and feed costs', -s.cowCost) +
       row('Labor', -s.labor) +
       row('Overhead', -s.overhead) +

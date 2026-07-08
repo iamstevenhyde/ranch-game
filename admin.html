@@ -111,37 +111,36 @@
     </div>
   </section>
 
-  <!-- Board Meeting Monitor -->
+  <!-- Combined Year Monitor: operations status (teams set ops + bids on one page) -->
   <section id="secBoard" style="display:none">
-    <h2>Board Meeting <span id="boardYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <h2>Year in Progress <span id="boardYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
     <div class="card">
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.8rem">
-        Teams set operations for the year (expand or destock, borrow or pay down, adopt technology).
-        AI ranches have already decided. Open the auction when the human teams are ready.
+        Teams set operations (expand/destock, debt, technology, semen) and place sealed bids on
+        one page, then lock in. AI ranches have already decided. Resolve the year when teams are ready.
       </p>
       <table id="tblBoard">
-        <thead><tr><th>Team</th><th>Type</th><th>Operations set</th></tr></thead>
+        <thead><tr><th>Team</th><th>Type</th><th>Locked in</th></tr></thead>
         <tbody id="tbodyBoard"></tbody>
       </table>
       <div class="row" style="margin-top:1rem">
-        <button id="btnOpenAuctionReal" onclick="openAuction()">Open Auction</button>
         <span class="status" id="boardStatus"></span>
       </div>
     </div>
   </section>
 
-  <!-- Auction Monitor -->
+  <!-- Sale Monitor (shown alongside the year monitor) -->
   <section id="secAuction" style="display:none">
-    <h2>Sealed-Bid Auction <span id="auctionYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <h2>Sealed-Bid Sale <span id="auctionYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
     <div class="card">
       <table id="tblBulls">
         <thead><tr><th>Bull</th><th>Tier</th><th>Anchor</th><th>Range</th><th>Bids In</th><th>Winner</th><th>Price</th></tr></thead>
         <tbody id="tbodyBulls"></tbody>
       </table>
       <div class="row" style="margin-top:1rem">
-        <button id="btnResolve" onclick="resolveAuction()">Resolve Auction</button>
+        <button id="btnResolve" onclick="resolveAuction()">Resolve Year</button>
         <button id="btnNextYear" onclick="nextYear()" style="display:none" class="secondary">Advance to Next Year</button>
-        <span class="status" id="auctionStatus">Collecting sealed bids.</span>
+        <span class="status" id="auctionStatus">Collecting operations and sealed bids.</span>
       </div>
     </div>
   </section>
@@ -244,15 +243,24 @@ async function resumeGame() {
     document.getElementById('secLeaderboard').style.display = '';
     subscribeToRanches();
     await refreshRanches();
-  } else if (g.phase === 'board') {
+  } else if (g.phase === 'board' || g.phase === 'auction') {
+    // combined year page: operations + sale monitor together
     showSection('secBoard');
+    document.getElementById('secAuction').style.display = '';
     document.getElementById('secLeaderboard').style.display = '';
-    document.getElementById('btnOpenAuctionReal').disabled = false;
+    document.getElementById('btnResolve').disabled = false;
+    document.getElementById('btnNextYear').style.display = 'none';
     document.getElementById('boardYear').textContent = 'Year ' + CUR_YEAR;
+    document.getElementById('auctionYear').textContent = 'Year ' + CUR_YEAR;
+    subscribeToAuction();
     await refreshBoard();
-  } else if (g.phase === 'auction' || g.phase === 'resolve') {
-    showSection('secAuction');
+    await refreshAuction();
+  } else if (g.phase === 'resolve') {
+    showSection('secBoard');
+    document.getElementById('secAuction').style.display = '';
     document.getElementById('secLeaderboard').style.display = '';
+    document.getElementById('btnNextYear').style.display = '';
+    await refreshBoard();
     await refreshAuction();
   } else {
     showSection('secLobby');
@@ -445,7 +453,9 @@ function renderRanches(ranches, teams) {
   });
 }
 
-// ---- Open a year: step the world, open the board meeting ----
+// ---- Open a year: step the world, open the COMBINED board + auction (one team page) ----
+// Bulls are generated NOW (not in a separate auction step) so the team sees operations
+// and the sale on one screen and locks both in together. Admin then resolves the year.
 async function openYear() {
   document.getElementById('btnOpenAuction').disabled = true;
   CUR_YEAR++;
@@ -457,18 +467,47 @@ async function openYear() {
   await logDecision(null, 'phase_advanced', { from: (CUR_YEAR === 1 ? 'market' : 'resolve'), to: 'board', year: CUR_YEAR });
 
   // AI ranches buy their ranches now (year 1 only; idempotent), AFTER the humans have
-  // taken first pick, then make operational decisions before the auction.
+  // taken first pick, then make operational decisions.
   await aiMarketPurchases();
   await applyAiDecisions(world);
+  // generate this year's bulls up front so they appear on the combined team page
+  await generateBulls(world);
 
   setPhaseChip('board');
   showSection('secBoard');
+  document.getElementById('secAuction').style.display = '';       // combined monitor
   document.getElementById('secLeaderboard').style.display = '';
-  document.getElementById('btnOpenAuctionReal').disabled = false;
+  document.getElementById('btnResolve').disabled = false;
+  document.getElementById('btnResolve').style.display = '';
+  document.getElementById('btnNextYear').style.display = 'none';
   document.getElementById('boardYear').textContent = 'Year ' + CUR_YEAR;
-  msg('Year ' + CUR_YEAR + ' board meeting is open. Teams set operations, then open the auction.', 'ok');
+  document.getElementById('auctionYear').textContent = 'Year ' + CUR_YEAR;
+  msg('Year ' + CUR_YEAR + ' is open. Teams set operations and bids on one page, then you resolve the year.', 'ok');
+  subscribeToAuction();
   startPolling();
   refreshBoard();
+  refreshAuction();
+}
+
+// Generate and insert this year's bull lots (real Red Bluff names, no dup within a sale).
+async function generateBulls(world) {
+  const bullRows = [];
+  const usedNames = new Set();
+  for (let i = 0; i < RanchEngine.BULLS_PER_YEAR; i++) {
+    let b = RanchEngine.makeBull(world);
+    for (let tries = 0; b.name && usedNames.has(b.name) && tries < 25; tries++) b = RanchEngine.makeBull(world);
+    if (b.name) usedNames.add(b.name);
+    bullRows.push({
+      game_id: GAME_ID, year: CUR_YEAR,
+      sire: b.sire, tier: b.tier,
+      name: b.name || null,
+      meta: b.name ? { breed: b.breed, consignor: b.consignor, epds: b.epds, dollars: b.dollars, realYear: b.realYear } : null,
+      catalog: b.catalog, truth: b.truth,
+      anchor: b.anchor, reserve: b.reserve,
+      winner_team: null, price: null,
+    });
+  }
+  await supa.from('bulls').insert(bullRows);
 }
 
 async function applyAiDecisions(world) {
@@ -501,49 +540,8 @@ async function refreshBoard() {
   });
   const waiting = humans.filter(t => !submitted.has(t.id)).length;
   document.getElementById('boardStatus').textContent = waiting === 0
-    ? 'All human teams have set operations. Ready to open the auction.'
-    : waiting + ' of ' + humans.length + ' human teams still deciding.';
-}
-
-// ---- Open auction ----
-async function openAuction() {
-  document.getElementById('btnOpenAuctionReal').disabled = true;
-
-  const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
-  const world = gRow.world || RanchEngine.newWorld();
-  await supa.from('games').update({ phase: 'auction' }).eq('id', GAME_ID);
-  await logDecision(null, 'phase_advanced', { from: 'board', to: 'auction', year: CUR_YEAR });
-
-  // Generate bulls and insert. With the real Red Bluff catalog loaded, lots carry real
-  // bull names; retry duplicate names so one sale never lists the same animal twice.
-  const bullRows = [];
-  const usedNames = new Set();
-  for (let i = 0; i < RanchEngine.BULLS_PER_YEAR; i++) {
-    let b = RanchEngine.makeBull(world);
-    for (let tries = 0; b.name && usedNames.has(b.name) && tries < 25; tries++) {
-      b = RanchEngine.makeBull(world);
-    }
-    if (b.name) usedNames.add(b.name);
-    bullRows.push({
-      game_id: GAME_ID, year: CUR_YEAR,
-      sire: b.sire, tier: b.tier,
-      name: b.name || null,
-      meta: b.name ? { breed: b.breed, consignor: b.consignor, epds: b.epds, dollars: b.dollars, realYear: b.realYear } : null,
-      catalog: b.catalog, truth: b.truth,
-      anchor: b.anchor, reserve: b.reserve,
-      winner_team: null, price: null,
-    });
-  }
-  await supa.from('bulls').insert(bullRows);
-
-  setPhaseChip('auction');
-  showSection('secAuction');
-  document.getElementById('secLeaderboard').style.display = '';
-  document.getElementById('btnResolve').disabled = false;
-  document.getElementById('auctionYear').textContent = 'Year ' + CUR_YEAR;
-  msg('Auction open for Year ' + CUR_YEAR + '. Waiting for sealed bids.', 'ok');
-  subscribeToAuction();
-  refreshAuction();
+    ? 'All human teams have locked in operations and bids. Ready to resolve the year.'
+    : waiting + ' of ' + humans.length + ' human teams still deciding (operations + bids on one page).';
 }
 
 // ---- Auction monitor ----
@@ -601,11 +599,14 @@ function renderAuction(bulls, bidCount, humanCount, teamMap) {
     tbody.appendChild(tr);
   });
 
-  const allResolved = bulls.length > 0 && bulls.every(b => b.winner_team !== null || b.price === null);
-  document.getElementById('btnNextYear').style.display = allResolved ? '' : 'none';
-  document.getElementById('auctionStatus').textContent = allResolved
-    ? 'Auction resolved. Review results, then advance to next year.'
-    : 'Collecting sealed bids from human teams.';
+  // resolved state is driven by the game PHASE now (bulls exist during the combined
+  // year page with null winner/price, so a null-price check would fire prematurely)
+  const resolved = document.getElementById('phaseChip').textContent === 'resolve';
+  document.getElementById('btnNextYear').style.display = resolved ? '' : 'none';
+  document.getElementById('btnResolve').style.display = resolved ? 'none' : '';
+  document.getElementById('auctionStatus').textContent = resolved
+    ? 'Year resolved. Review results, then advance to next year.'
+    : 'Collecting operations and sealed bids from teams.';
 }
 
 // ---- Resolve auction ----
@@ -682,8 +683,9 @@ async function resolveAuction() {
   await logDecision(null, 'phase_advanced', { from: 'auction', to: 'resolve', year: CUR_YEAR });
 
   setPhaseChip('resolve');
-  msg('Auction resolved. Production year complete.', 'ok');
-  document.getElementById('btnResolve').disabled = false;
+  msg('Year resolved: bids settled and the production year is complete. Review, then advance.', 'ok');
+  document.getElementById('btnResolve').disabled = true;
+  document.getElementById('btnNextYear').style.display = '';
   refreshAuction();
   renderLeaderboard();
 }
