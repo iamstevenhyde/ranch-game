@@ -238,6 +238,22 @@ function bestSemenPrice(r, w, bull) {
   return elast < 0.98 ? 85 : elast > 1.02 ? 12 : 40;
 }
 
+// ---------- tallow / rendering (7/08, Steven: firms he spoke to run a tallow program) --
+// Rendered beef fat from CULL cows is a value-added byproduct. A team can sign a rendering
+// contract (annual fee) to capture it. The pedagogy is diversification + robustness: cull
+// volume RISES in drought (you destock, more cows go to rendering) exactly when calf
+// revenue falls, and the tallow price runs on its own cycle, so the income smooths the
+// cattle cycle instead of amplifying it. Modest magnitude: a hedge, not a main engine.
+const TALLOW = { contractFee: 6000, valuePerCull: 62, baseCull: 0.11, droughtCull: 0.10 };
+function tallowRevenue(r, w) {
+  if (!r.tallowContract) return { gross: 0, net: 0, culls: 0 };
+  const sev = droughtSeverity(w, r.region);
+  const cullRate = TALLOW.baseCull + sev * TALLOW.droughtCull; // drought sends more cows to rendering
+  const culls = r.herd * cullRate;
+  const gross = culls * TALLOW.valuePerCull * w.tallowIdx;
+  return { gross, net: gross - TALLOW.contractFee, culls };
+}
+
 // drought Markov chain (2013-2025 western DSI)
 const DROUGHT_T = {
   mild:     { severe: 0.15, moderate: 0.35 },
@@ -349,6 +365,7 @@ function newWorld() {
     year: 0, feederIdx: 1.0, drought: 'mild', wageRatchet: 1.0,
     rateHikeYears: 0, processorRegion: null, shock: 'calm',
     droughtHist: [], shockHist: [], feederHist: [],
+    tallowIdx: 1.0, tallowHist: [],
   };
 }
 function stepWorld(w) {
@@ -370,6 +387,14 @@ function stepWorld(w) {
   if (w.shock === 'market_soft') dr -= 0.06;
   w.feederIdx = clamp(w.feederIdx * (1 + dr), 0.6, 2.2);
   w.feederHist.push(w.feederIdx);
+  // tallow index (rendered-fat demand: biodiesel + food/cosmetic). Runs on its OWN cycle,
+  // largely UNCORRELATED with feeder cattle, so tallow income diversifies the cattle
+  // cycle. A tariff/soft-beef shock even nudges rendering demand UP (fat finds other
+  // buyers), which is the counter-cyclical hedge the mechanic teaches.
+  let td = 0.015 + gauss() * 0.07;
+  if (w.shock === 'market_soft' || w.shock === 'tariff') td += 0.05;
+  w.tallowIdx = clamp(w.tallowIdx * (1 + td), 0.55, 2.0);
+  w.tallowHist.push(w.tallowIdx);
   const wg = w.drought === 'severe' ? 0.08 + Math.random() * 0.03 : WAGE_DRIFT;
   w.wageRatchet *= (1 + wg);
   // this season's AI-semen offerings (same two sires every team sees; opens with the
@@ -389,7 +414,7 @@ function makeRanch(key, l) {
     key, a, county: l.county, region: l.region, herd: l.herd, herd0: l.herd,
     cash: START_CASH - l.ask, ranchAsk: l.ask,
     debt: 0, g, rep: 25 + Math.round(Math.random() * 15),
-    tech: new Set(), bulls: [], semen: null,
+    tech: new Set(), bulls: [], semen: null, tallowContract: false,
     landCap: l.landCap,
     // a ranch only needs so many herd sires; deep pockets no longer mean infinite bulls
     rosterCap: clamp(Math.round(l.herd / 250), 2, 8),
@@ -586,17 +611,20 @@ function productionYear(r, w) {
     b.lastStraws = Math.round(d.straws); b.lastSemenRev = Math.round(d.gross - SEMEN_SELL.programFee);
   }
   r.semenRoyalty = semenRoyalty; r.semenStraws = semenStraws;
+  // tallow: byproduct income off cull cows, net of the rendering contract fee
+  const tal = tallowRevenue(r, w);
+  r.tallowNet = tal.net; r.tallowCulls = Math.round(tal.culls);
   const cowCostTot = cowCost(r, w) * r.herd, laborTot = laborCost(r, w);
   const overhead = 35000, interest = r.debt * (w.rateHikeYears > 0 ? 0.13 : 0.07);
   // fixed overhead (equipment, insurance, facilities) is lumpy: small outfits pay it too
   const costs = (cowCostTot + laborTot) * lean + overhead + extraCost + commodityBullCost + interest;
   r.totalCost += costs; r.totalLbs += calves * lbs;
-  const net = revenue + semenRoyalty - costs;
+  const net = revenue + semenRoyalty + tal.net - costs;
   r.cash += net;
   r.revHist.push(net);
   // income statement snapshot for the balance-sheet card (display only; the math above
   // is the source of truth). Rounded at render time, not here.
-  r.lastStmt = { year: w.year, revenue, semenRoyalty, semenStraws, cowCost: cowCostTot * lean, labor: laborTot * lean,
+  r.lastStmt = { year: w.year, revenue, semenRoyalty, semenStraws, tallowNet: tal.net, tallowCulls: Math.round(tal.culls), cowCost: cowCostTot * lean, labor: laborTot * lean,
                  overhead, bullCost: commodityBullCost, breeding: extraCost, interest, net,
                  calves: Math.round(calves), lbs: Math.round(lbs) };
   // genetics evolve toward active bulls' true traits, plus any AI semen program bought
@@ -691,6 +719,12 @@ function decideYear(r, w) {
     if (w.year - b.boughtYear >= 4 || !canSellSemen(b)) continue;
     const p = bestSemenPrice(r, w, b);
     if (semenDemand(r, w, b, p).gross > SEMEN_SELL.programFee) b.semenPrice = p; else b.semenPrice = 0;
+  }
+  // tallow contract: sign it once the base cull volume clears the fee (positive EV). The
+  // defensive archetypes value the counter-cyclical smoothing most, so they hold it; the
+  // volume players take it too when the herd is large enough to matter.
+  if (!r.tallowContract && r.herd * TALLOW.baseCull * TALLOW.valuePerCull > TALLOW.contractFee * 1.4) {
+    r.tallowContract = true;
   }
   // AI-semen: genetics-led archetypes buy proven straws when they are NOT winning bulls
   // at auction (the make-vs-buy hedge). Cheaper per unit, but the conception gamble is
@@ -875,6 +909,8 @@ if (typeof window !== 'undefined') {
     canSellSemen,
     semenDemand,
     bestSemenPrice,
+    TALLOW,
+    tallowRevenue,
     DROUGHT_T,
     SHOCKS,
     TRAITS,
@@ -928,6 +964,8 @@ if (typeof window !== 'undefined') {
     canSellSemen,
     semenDemand,
     bestSemenPrice,
+    TALLOW,
+    tallowRevenue,
     DROUGHT_T,
     SHOCKS,
     TRAITS,

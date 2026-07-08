@@ -192,6 +192,11 @@
         <div class="dec-sub">Open a proven bull you own to the national semen market and set your price per straw. Demand follows quality and price.</div>
         <div id="semenSell"></div>
       </div>
+      <div class="dec-block">
+        <div class="dec-head">Rendering / Tallow</div>
+        <div class="dec-sub">Sign a rendering contract to sell tallow off your cull cows. Byproduct income that rises in drought, when you cull more and calf checks shrink.</div>
+        <div id="tallowChoice"></div>
+      </div>
 
       <div class="consequence" id="boardConsequence"></div>
     </div>
@@ -515,21 +520,26 @@ const ST_PATHS = {
 };
 const ST_LBL = { OR: { x: 90, y: 140 }, ID: { x: 210, y: 190 }, MT: { x: 312, y: 88 }, WY: { x: 358, y: 192 }, CO: { x: 374, y: 298 }, NV: { x: 96, y: 292 }, UT: { x: 212, y: 336 } };
 
-let boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null, semenSell: {} };
+let boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: false };
 let boardBaseSt = null, boardWorld = null, boardSemen = [];
 
 // the ranch as it WILL be after this year's operations are applied (from the year
 // snapshot), so the bid exposure and consequence lines draw on post-operations cash
 function projectedRanch() {
   if (!boardBaseSt || !boardWorld) return null;
-  const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
+  const raw = localStorage.getItem(boardKey());
+  const r = reviveState(raw ? JSON.parse(raw) : boardBaseSt); // fall back to the loaded base if the snapshot is missing
+  if (!r) return null;
   const n = choiceNumbers();
   applyDecisions(r, boardWorld, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
-  applySemenSell(r);
+  applySemenSell(r); applyTallow(r);
   return r;
 }
 // set b.semenPrice on owned proven bulls from this year's sell choices (reset first so a
 // bull not opened this season is closed; the program fee is per-year)
+function applyTallow(r) {
+  r.tallowContract = (CUR_YEAR >= RanchEngine.UNLOCKS.tech) && !!boardChoice.tallow;
+}
 function applySemenSell(r) {
   (r.bulls || []).forEach(b => { if (RanchEngine.canSellSemen(b)) b.semenPrice = 0; });
   for (const [i, price] of Object.entries(boardChoice.semenSell || {})) {
@@ -593,7 +603,7 @@ async function refreshBoard(world) {
   if (!baseRaw) { baseRaw = JSON.stringify(team.state); localStorage.setItem(boardKey(), baseRaw); }
   boardBaseSt = reviveState(JSON.parse(baseRaw));
   boardWorld = world || RanchEngine.newWorld();
-  boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null, semenSell: {} };
+  boardChoice = { herd: 'hold', debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: !!(reviveState(JSON.parse(baseRaw)).tallowContract) };
   boardSemen = (boardWorld && boardWorld.semenCatalog) || [];
   const st = boardBaseSt, w = boardWorld, reg = RanchEngine.REGIONS[st.region];
   const sev = RanchEngine.droughtSeverity(w, st.region);
@@ -648,9 +658,27 @@ async function refreshBoard(world) {
     `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`
   ).join('');
 
-  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell();
+  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
 }
+
+// ---- Rendering / tallow: opt-in byproduct income off cull cows (counter-cyclical) ----
+function renderTallowChoice() {
+  const el = document.getElementById('tallowChoice'); if (!el) return;
+  const st = boardBaseSt;
+  if (CUR_YEAR < RanchEngine.UNLOCKS.tech) { el.innerHTML = lockedNote('Rendering contracts open in year ' + RanchEngine.UNLOCKS.tech + '.'); return; }
+  const on = !!boardChoice.tallow;
+  // preview at this year's herd + drought so the counter-cyclical bump is visible
+  const preview = RanchEngine.tallowRevenue(Object.assign({}, st, { tallowContract: true }), boardWorld);
+  const sev = RanchEngine.droughtSeverity(boardWorld, st.region);
+  const droughtNote = sev >= 1 ? ' Severe drought this year means heavy culling, so the program pays more.' : sev >= 0.5 ? ' Drought is lifting your cull volume this year.' : '';
+  el.innerHTML =
+    `<label class="opt${on ? ' on' : ''}" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;min-width:100%">` +
+    `<input type="checkbox" ${on ? 'checked' : ''} onchange="setTallow(this.checked)" style="width:auto;margin:0">` +
+    `<span><span class="opt-t">Run a rendering / tallow program</span>` +
+    `<span class="opt-d">~${Math.round(preview.culls)} cull cows, net <b style="color:${preview.net >= 0 ? 'var(--sand)' : '#d99079'}">${money(preview.net)}</b> this year after the $${RanchEngine.TALLOW.contractFee.toLocaleString()} contract fee.${droughtNote}</span></span></label>`;
+}
+function setTallow(on) { boardChoice.tallow = !!on; renderTallowChoice(); updateConsequence(); }
 
 // ---- Sell genetics: open owned proven bulls to the national semen market ----
 function renderSemenSell() {
@@ -909,11 +937,13 @@ async function submitPlay() {
   if (!boardBaseSt) { msg('Page not ready, reopen it.', 'err'); return; }
   document.getElementById('btnLockYear').disabled = true;
   try {
-    const r = reviveState(JSON.parse(localStorage.getItem(boardKey())));
+    const raw = localStorage.getItem(boardKey());
+    const r = reviveState(raw ? JSON.parse(raw) : boardBaseSt);
+    if (!r) { msg('Page not ready, reopen it.', 'err'); return; }
     const w = boardWorld;
     const n = choiceNumbers();
     applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
-    applySemenSell(r);
+    applySemenSell(r); applyTallow(r);
 
     const { error } = await supa.from('teams').update({ state: JSON.parse(JSON.stringify(r, setReplacer)) }).eq('id', TEAM_ID);
     if (error) { msg('Could not save operations: ' + error.message, 'err'); return; }
@@ -1266,6 +1296,7 @@ function booksCard(st, w) {
       `<table class="bs-table" style="width:100%;font-size:0.8rem">` +
       row('Calf and beef sales', s.revenue) +
       (s.semenRoyalty ? row('Semen sales, net' + (s.semenStraws ? ' (' + s.semenStraws.toLocaleString() + ' straws)' : ''), s.semenRoyalty) : '') +
+      (s.tallowNet ? row('Tallow, net' + (s.tallowCulls ? ' (' + s.tallowCulls.toLocaleString() + ' culls)' : ''), s.tallowNet) : '') +
       row('Cow and feed costs', -s.cowCost) +
       row('Labor', -s.labor) +
       row('Overhead', -s.overhead) +
@@ -1343,6 +1374,7 @@ function cattlemensWeekly(w, bulls, teams, myState, nameById) {
     `The Cattlemen's Weekly <span style="font-family:var(--mono);font-weight:400;font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">YEAR ${CUR_YEAR} WRAP</span></div>` +
     `<div style="font-size:0.82rem">Feeder index closed at <b style="font-family:var(--mono)">${(w.feederIdx || 1).toFixed(2)}</b> ` +
     `(${dF >= 0 ? '+' : ''}${dF.toFixed(0)}% on the year) under ${esc(SHOCK_WORD[w.shock] || w.shock)}, ${esc(w.drought)} drought conditions. ` +
+    (w.tallowIdx ? `The tallow index sat at <b style="font-family:var(--mono)">${w.tallowIdx.toFixed(2)}</b>, on its own cycle apart from cattle. ` : '') +
     (sold.length
       ? `The bull sale grossed <b style="font-family:var(--mono)">$${Math.round(gross).toLocaleString()}</b> on ${sold.length} of ${bulls.length} lots` +
         (top ? `, topped by ${esc(top.name || top.sire)} at <b style="font-family:var(--mono)">$${Math.round(top.price).toLocaleString()}</b> to ${esc(nameById[top.winner_team] || 'a ranch')}.` : `.`)
@@ -1393,6 +1425,7 @@ function startPolling() {
 
 // ---- Utilities ----
 function reviveState(st) {
+  if (st == null) return null; // null-safe: a missing per-year snapshot must not throw on .tech
   const obj = JSON.parse(JSON.stringify(st));
   if (obj.tech && obj.tech.__type === 'Set') obj.tech = new Set(obj.tech.values);
   else if (Array.isArray(obj.tech)) obj.tech = new Set(obj.tech);
