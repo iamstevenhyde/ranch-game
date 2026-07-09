@@ -310,12 +310,12 @@
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
-<script src="config.js"></script>
-<script src="bull-catalog.js?v=1"></script>
-<script src="engine.js"></script>
+<script src="config.js?v=0a671f3bf9"></script>
+<script src="bull-catalog.js?v=5d3dd3d5ad"></script>
+<script src="engine.js?v=79837e5a04"></script>
 <!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
 <script src="assets/bulls/manifest.js?v=2"></script>
-<script src="county-geo.js?v=2"></script>
+<script src="county-geo.js?v=b95a77d815"></script>
 <script>
 'use strict';
 
@@ -1605,6 +1605,9 @@ async function showResults(world) {
       `<strong style="color:var(--text)">${st.herd.toLocaleString()}</strong> head, cash ` +
       `<strong style="color:var(--text)">$${Math.round(st.cash).toLocaleString()}</strong>, ` +
       `debt $${Math.round(st.debt).toLocaleString()}, ${g('dollarBeef', '$Beef')} ${RanchEngine.dollarBeef(st.g)}, reputation ${Math.round(st.rep)}.</div>`;
+    if (st.lastBullDeaths > 0) {
+      html += `<div style="font-size:0.82rem;color:#d99079;margin-top:0.3rem">You lost ${st.lastBullDeaths} herd bull${st.lastBullDeaths > 1 ? 's' : ''} this year. That coverage is gone until you buy or trade for a replacement.</div>`;
+    }
     html += booksCard(st, world);
   }
   html += cattlemensWeekly(world, bulls || [], teams || [], st, nameById);

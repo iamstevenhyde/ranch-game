@@ -561,6 +561,10 @@ function droughtSeverity(w, region) {
 }
 
 // ---------- ranches ----------
+// rare bull loss: a herd sire can be lost to injury, illness, or a breeding-season wreck.
+// Low enough (~2%/yr per bull) to be an occasional gut-punch, not a planning tax; it rewards
+// keeping a little bench and gives the starting roster and trades a reason to exist. (Steven 7/09)
+const BULL_DEATH = 0.02;
 // inherited herd bulls a ranch already runs at the start (Steven 7/08): every operation
 // walks in with sires in the pen, so a bull TRADE has something to trade from year one.
 // They are maintenance bulls, not sale-toppers: commercial tier, truth near the herd's own
@@ -853,6 +857,14 @@ function productionYear(r, w) {
   for (const b of active) b.realized += (bullYearValue(r, w, b.truth, bullCoverage(r))
                                          + 0.25 * 4000 * Math.pow(w.feederIdx, FEEDER_ELASTICITY))
                                         * Math.pow(DISCOUNT, w.year - b.boughtYear);
+  // rare bull loss: he bred this season, then is gone (his coverage disappears next year).
+  // Applies to active bulls of any origin, including inherited sires.
+  let died = 0;
+  r.bulls = r.bulls.filter(b => {
+    if (w.year - b.boughtYear < 4 && Math.random() < BULL_DEATH) { died++; return false; }
+    return true;
+  });
+  r.lastBullDeaths = died;
 }
 
 // ---------- decisions ----------
