@@ -561,17 +561,33 @@ function droughtSeverity(w, region) {
 }
 
 // ---------- ranches ----------
+// inherited herd bulls a ranch already runs at the start (Steven 7/08): every operation
+// walks in with sires in the pen, so a bull TRADE has something to trade from year one.
+// They are maintenance bulls, not sale-toppers: commercial tier, truth near the herd's own
+// baseline, so they hold genetics steady but do not improve them (that is what auction bulls
+// and the female board are for). Count is ~half the roster cap so there is still room to bid
+// at the year-one sale. They age out on the normal 4-year clock; no random death (Steven).
+function startingBulls(g, rosterCap) {
+  const n = Math.max(1, Math.round(rosterCap / 2));
+  const bulls = [];
+  for (let i = 0; i < n; i++) {
+    const truth = {};
+    TRAITS.forEach(t => truth[t] = clamp(g[t] - 0.2 + gauss() * 0.4, 1, 10)); // inherited, ~herd level
+    bulls.push({ truth, tier: 'commercial', boughtYear: 0, paid: 0, inherited: true, covHead: 0, realized: 0 });
+  }
+  return bulls;
+}
 function makeRanch(key, l) {
   const a = ARCHETYPES[key];
   const g = {}; TRAITS.forEach(t => g[t] = clamp(4.5 + gauss() * 0.8, 3, 7));
+  // a ranch only needs so many herd sires; deep pockets no longer mean infinite bulls
+  const rosterCap = clamp(Math.round(l.herd / 250), 2, 8);
   return {
     key, a, county: l.county, region: l.region, herd: l.herd, herd0: l.herd,
     cash: START_CASH - l.ask, ranchAsk: l.ask,
     debt: 0, g, rep: 25 + Math.round(Math.random() * 15),
-    tech: new Set(), bulls: [], semen: null, tallowContract: false,
-    landCap: l.landCap,
-    // a ranch only needs so many herd sires; deep pockets no longer mean infinite bulls
-    rosterCap: clamp(Math.round(l.herd / 250), 2, 8),
+    tech: new Set(), bulls: startingBulls(g, rosterCap), semen: null, tallowContract: false,
+    landCap: l.landCap, rosterCap,
     peakEquity: 0, maxDrawdown: 0, totalCost: 0, totalLbs: 0, premSum: 0, premN: 0,
     revHist: [], semenRoyalty: 0, lastStmt: null,
   };
@@ -939,7 +955,10 @@ function auctionYear(ranches, w, ledger) {
     let best = null, bestBid = 0, bestTrue = null, bestTrueVal = -1, bestTrueOpen = false;
     for (const r of ranches) {
       if (r.a.bidCashCap <= 0) continue;
-      const activeN = r.bulls.filter(b => w.year - b.boughtYear < 4).length;
+      // inherited herd bulls do NOT consume auction roster slots: the cap is how many SALE
+      // bulls you run, and you cull the inherited ones as you buy better. This keeps the
+      // year-one auction (and its winner's curse) as competitive as before the starting pen.
+      const activeN = r.bulls.filter(b => !b.inherited && w.year - b.boughtYear < 4).length;
       const open = activeN < r.rosterCap;
       // who the bull is TRULY worth most to (true traits, no noise); includes the
       // pedigree marketing asset, which is real value to premium marketers

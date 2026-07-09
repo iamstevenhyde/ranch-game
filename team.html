@@ -1254,7 +1254,7 @@ function updateConsequence() {
     `<div class="fit-note">${fitNote(r)}</div>`;
   // the sale exposure and every bid line follow post-operations cash
   AUCTION_CASH = r.cash;
-  const activeN = (r.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length;
+  const activeN = (r.bulls || []).filter(b => !b.inherited && CUR_YEAR - b.boughtYear < 4).length;
   AUCTION_SLOTS = Math.max(0, (r.rosterCap || 4) - activeN);
   updateExposure();
   document.querySelectorAll('#bullCards input[type=number]').forEach(i => { if (i.value) updateBidConseq(i.id.replace('bid_', '')); });
@@ -1380,7 +1380,7 @@ async function refreshAuction(world) {
   // planning to expand/adopt reduces what the HUD says you can bid
   const proj = projectedRanch() || st;
   AUCTION_CASH = proj ? proj.cash : 0;
-  const activeN = proj ? (proj.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length : 0;
+  const activeN = proj ? (proj.bulls || []).filter(b => !b.inherited && CUR_YEAR - b.boughtYear < 4).length : 0;
   AUCTION_SLOTS = proj ? Math.max(0, (proj.rosterCap || 4) - activeN) : 0;
   AUCTION_LOTS = (bulls || []).filter(b => !b.winner_team).length;
   renderHerdPanel(st);

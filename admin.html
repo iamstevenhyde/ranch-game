@@ -669,7 +669,7 @@ async function resolveAuction() {
       const state = reviveState(team.state);
       const arch  = RanchEngine.ARCHETYPES[team.archetype];
       if (!arch || arch.bidCashCap <= 0) continue;
-      const activeN = (state.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length;
+      const activeN = (state.bulls || []).filter(b => !b.inherited && CUR_YEAR - b.boughtYear < 4).length;
       const rosterCap = state.rosterCap || 4;
       if (activeN >= rosterCap) continue;
       const bullObj = { catalog: bull.catalog, truth: bull.truth, tier: bull.tier,
