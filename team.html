@@ -100,10 +100,13 @@
   .stepper button { width: 28px; height: 28px; padding: 0; font-size: 1rem; line-height: 1; border-radius: 4px; }
   .stepper .qty { min-width: 20px; text-align: center; font-family: var(--mono); font-weight: 700; color: var(--tan); }
   /* co-opetition deals */
-  .deal-form { display: flex; flex-wrap: wrap; gap: 0.55rem; align-items: flex-end; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 0.6rem 0.75rem; margin-bottom: 0.6rem; }
-  .deal-field { display: flex; flex-direction: column; }
-  .deal-field label { margin-bottom: 0.15rem; }
-  .deal-form select, .deal-form input { margin: 0; border: 1px solid var(--border); border-radius: 4px; padding: 0.4rem 0.55rem; font-family: var(--mono); font-size: 0.86rem; background: var(--surface); color: var(--text); }
+  .deal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 0.8rem; align-items: end; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 0.85rem; margin-bottom: 0.6rem; }
+  .deal-field { display: flex; flex-direction: column; min-width: 0; }
+  .deal-field label { margin-bottom: 0.25rem; font-size: 0.8rem; color: var(--muted); }
+  .deal-form select, .deal-form input { margin: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 4px; padding: 0.45rem 0.55rem; font-family: var(--mono); font-size: 0.86rem; background: var(--surface); color: var(--text); }
+  .deal-terms { grid-column: 1 / -1; }
+  .deal-send { grid-column: 1 / -1; justify-self: end; min-width: 150px; }
+  @media (max-width: 560px) { .deal-form { grid-template-columns: 1fr; } }
   .deal-card { border: 1px solid var(--border); border-radius: 5px; background: var(--surface2); padding: 0.5rem 0.7rem; margin-bottom: 0.4rem; font-size: 0.82rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
   .deal-card .deal-actions { margin-left: auto; display: flex; gap: 0.4rem; }
   .deal-card button { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
@@ -204,6 +207,11 @@
           <div class="dec-sub">Buy or sell cows for the year. Irreversible before the shock hits.</div>
           <div class="opt-row" id="optHerd"></div>
         </div>
+        <div class="dec-block span2">
+          <div class="dec-head">Cow Market</div>
+          <div class="dec-sub">Buy replacement females outright at the posted price. Registered and elite females raise your herd genetics; commercial females are headcount. A few head against a herd of hundreds moves genetics slowly, the reason a bull is the cheaper lever.</div>
+          <div id="cowMarket"></div>
+        </div>
         <div class="dec-block">
           <div class="dec-head">Debt</div>
           <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
@@ -302,7 +310,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=79837e5a04"></script>
+<script src="engine.js?v=fe5d2016bb"></script>
 <!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
 <script src="assets/bulls/manifest.js?v=2"></script>
 <script src="county-geo.js?v=b95a77d815"></script>
@@ -717,7 +725,7 @@ async function refreshBoard(world) {
       `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`;
   }).join('');
 
-  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
+  renderHerdOptions(); renderCowMarket(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
   refreshDeals();
 }
@@ -1000,8 +1008,8 @@ function renderDealsPanel() {
     `<div class="deal-form" id="dealForm">` +
       `<div class="deal-field"><label>Deal</label><select id="dealType" onchange="onDealTypeChange()">${typeOpts}</select></div>` +
       `<div class="deal-field"><label>Partner</label><select id="dealPartner"></select></div>` +
-      `<div class="deal-field" id="dealTerms" style="flex:1;min-width:190px"></div>` +
-      `<button type="button" onclick="proposeDeal()">Send offer</button>` +
+      `<div class="deal-field deal-terms" id="dealTerms"></div>` +
+      `<button type="button" class="deal-send" onclick="proposeDeal()">Send offer</button>` +
     `</div>` +
     `<div class="deal-meter" id="dealMeter"></div>` +
     `<div id="dealLists"></div>`;
@@ -1027,7 +1035,7 @@ function renderDealTerms() {
     const bulls = (boardBaseSt && boardBaseSt.bulls) || [];
     if (!bulls.length) { wrap.innerHTML = `<label>Your bull</label><div style="color:var(--muted);font-size:0.8rem">You own no bulls to trade yet.</div>`; updateDealMeter(); return; }
     const opts = bulls.map((b, i) => `<option value="${i}">${esc(b.name || b.sire || 'Bull')} (${b.tier}, $B ${RanchEngine.dollarBeef(b.truth)})</option>`).join('');
-    wrap.innerHTML = `<label>Your bull &rarr; partner, for $</label><div style="display:flex;gap:0.4rem"><select id="dealBull" onchange="updateDealMeter()">${opts}</select><input type="number" id="dealPrice" min="0" placeholder="price" style="width:96px" oninput="updateDealMeter()"></div>`;
+    wrap.innerHTML = `<label>Your bull &rarr; partner, for $</label><div style="display:flex;gap:0.4rem"><select id="dealBull" style="flex:1;min-width:0" onchange="updateDealMeter()">${opts}</select><input type="number" id="dealPrice" min="0" placeholder="price" style="width:96px;flex:none" oninput="updateDealMeter()"></div>`;
   } else if (type === 'semen_split') {
     if (!boardSemen.length) { wrap.innerHTML = `<label>Sire</label><div style="color:var(--muted);font-size:0.8rem">No AI straws offered this year.</div>`; updateDealMeter(); return; }
     const opts = boardSemen.map((s, i) => `<option value="${i}">${esc(s.name)} (${s.tier}, $${s.price.toLocaleString()})</option>`).join('');

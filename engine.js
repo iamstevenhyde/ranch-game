@@ -280,11 +280,12 @@ const CULL_CEIL = 7.2;           // selection-only plateau; bulls / elite female
 const CULL_COW_PRICE = 1150;     // mature cull cow $/head at feederIdx 1 (below a bred replacement)
 // AI cull intensity by secret objective. The AI plays a straight cull-and-replace: HARD
 // culling is a lever humans discover, and because the balance gate only tests AI-vs-AI, a
-// gate-neutral AI stance keeps the baseline balance intact while the human lever stays as
-// strong as it needs to feel. Passive is exempt in productionYear (keeps its own do-nothing cull).
+// AIs cull to their archetype (Steven 7/09): genetics builders select the bottom HARD to lift
+// the herd's base, volume chasers cull LIGHT to keep headcount, the rest run a standard cull.
+// Re-gated after this change. Passive is exempt in productionYear (keeps its own do-nothing cull).
 const CULL_POLICY = {
-  elite_genetics: 'normal', seedstock: 'normal',
-  rapid_expansion: 'normal', naive_roi: 'normal', cost_leader: 'normal',
+  elite_genetics: 'hard', seedstock: 'hard',
+  rapid_expansion: 'light', naive_roi: 'light', cost_leader: 'normal',
   conservative: 'normal', family_survival: 'normal', passive: 'light',
 };
 function cullMode(r) { return CULL[r.cullMode] ? r.cullMode : 'normal'; }
@@ -914,10 +915,14 @@ function decideYear(r, w) {
     const buy = Math.min(Math.floor(budget / cowPrice), r.landCap - r.herd, Math.round(r.herd * 0.35));
     if (buy > 0) { r.herd += buy; r.cash -= buy * cowPrice; }
   }
-  // replacement-female buys (A1 buy side) are a HUMAN lever: the fixed-price offer board
-  // lets a player raise the herd ceiling past what culling alone reaches. The scripted AI
-  // sticks to bulls and semen, so this stays gate-neutral (buyFemales is regression-tested
-  // through the human board path in test-flow.js, not exercised here).
+  // replacement-female buys: genetics archetypes work the cow market too (Steven 7/09), buying
+  // a registered lot early to lift the herd's maternal base, because a seedstock or elite
+  // operation selects its cows, not only its bulls. Kept modest and cash-buffered so it deepens
+  // the herd without starving the auction bid; other archetypes skip it (a bull is cheaper per
+  // genetic point). buyFemales also runs through the human board path in test-flow.js.
+  if ((r.key === 'elite_genetics' || r.key === 'seedstock') && w.year <= 2 && r.cash > 1500000) {
+    buyFemales(r, w, 'registered', 1);
+  }
   // debt paydown for low-debt types
   if (r.debt > 0 && (r.key === 'conservative' || r.key === 'family_survival')) {
     const pay = Math.min(r.debt, Math.max(0, r.cash - 80000));
