@@ -260,7 +260,7 @@
       <div class="mini-map" id="marketMap" style="margin-bottom:0.9rem"></div>
       <div style="overflow-x:auto">
         <table id="tblMarket">
-          <thead><tr><th>Ranch</th><th>County</th><th>Region</th><th>Herd</th><th>Ask</th><th>Cash left</th><th>Strategy</th><th>Action</th></tr></thead>
+          <thead><tr><th>Ranch</th><th>County</th><th>Herd</th><th>Ask</th><th>Cash left</th><th>Strategy</th><th>Action</th></tr></thead>
           <tbody id="tbodyMarket"></tbody>
         </table>
       </div>
@@ -529,7 +529,7 @@ function renderMarket(ranches) {
   const tbody = document.getElementById('tbodyMarket');
   tbody.innerHTML = '';
   if (!marketRanches.length) {
-    tbody.innerHTML = '<tr><td colspan="8"><em>No ranches available. You may have already purchased one.</em></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7"><em>No ranches available. You may have already purchased one.</em></td></tr>';
     return;
   }
   marketRanches.forEach((r, i) => {
@@ -537,7 +537,7 @@ function renderMarket(ranches) {
     r._house = houseStrategy(r);
     const tr = document.createElement('tr');
     tr.innerHTML =
-      `<td>${esc(r._name)}</td><td>${esc(r.county)}</td><td>${esc(r.region)}</td>` +
+      `<td>${esc(r._name)}</td><td>${esc(r.county)}</td>` +
       `<td>${r.herd.toLocaleString()} ${g('head', 'hd')}</td>` +
       `<td>$${r.ask.toLocaleString()}</td>` +
       `<td>$${(RanchEngine.START_CASH - r.ask).toLocaleString()}</td>` +
@@ -552,22 +552,19 @@ function pickRanchByCounty(county) {
   if (r) openBuyConfirm(r.id);
 }
 
-// ---- Inline buy confirmation (replaces the native confirm dialog): pick a strategy,
-// defaulted to the ranch's house strategy, then lock it in on purchase.
+// ---- Inline buy confirmation: the strategy comes with the ranch (the land is run under it).
+// Buying adopts that strategy; you can switch later from your ranch panel for a reputation cost.
 function openBuyConfirm(ranchId) {
   const r = marketRanches.find(x => x.id === ranchId);
   if (!r) return;
-  const keys = Object.keys(RanchEngine.ARCHETYPES).filter(k => !RanchEngine.ARCHETYPES[k].probe);
-  const options = keys.map(k =>
-    `<option value="${k}"${k === r._house ? ' selected' : ''}>${esc(RanchEngine.ARCHETYPES[k].label)}</option>`).join('');
+  const stratLabel = RanchEngine.ARCHETYPES[r._house]?.label || r._house;
   const el = document.getElementById('buyConfirm');
   el.innerHTML =
     `<div class="card" style="margin-top:0.8rem;background:var(--surface2)">` +
     `<div style="font-weight:700;font-size:0.95rem;color:var(--tan);margin-bottom:0.3rem">${esc(r._name)}</div>` +
     `<div style="font-size:0.82rem;color:var(--dim);margin-bottom:0.6rem">${esc(r.county)} &middot; ${r.herd.toLocaleString()} ${g('head', 'hd')} &middot; Ask $${r.ask.toLocaleString()} &middot; Cash left $${(RanchEngine.START_CASH - r.ask).toLocaleString()}</div>` +
-    `<label for="buyStrategy">Strategy</label>` +
-    `<select id="buyStrategy">${options}</select>` +
-    `<p style="font-size:0.76rem;color:var(--muted);margin:0.3rem 0 0.7rem">This is your scorecard: the strategy your ranch is graded on. You can change it later from your ranch panel, but switching costs 15 reputation.</p>` +
+    `<div style="margin-bottom:0.3rem">Strategy: <strong style="color:var(--tan)">${esc(stratLabel)}</strong></div>` +
+    `<p style="font-size:0.76rem;color:var(--muted);margin:0.1rem 0 0.7rem">This ranch is run as ${esc(stratLabel)}, so that becomes the strategy you are graded on. You can change it later from your ranch panel, but switching costs 15 reputation.</p>` +
     `<div style="display:flex;gap:0.6rem">` +
     `<button onclick="confirmBuy('${r.id}')">Confirm Buy</button>` +
     `<button class="secondary" onclick="document.getElementById('buyConfirm').style.display='none'">Cancel</button>` +
@@ -579,7 +576,7 @@ function openBuyConfirm(ranchId) {
 function confirmBuy(ranchId) {
   const r = marketRanches.find(x => x.id === ranchId);
   if (!r) return;
-  const strat = document.getElementById('buyStrategy').value;
+  const strat = r._house;   // the strategy comes with the ranch (switchable later for rep)
   ARCHETYPE = strat;
   buyRanch(r.id, r.county, r.ask, strat);
 }
