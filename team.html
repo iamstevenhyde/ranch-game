@@ -205,16 +205,6 @@
           <div class="opt-row" id="optHerd"></div>
         </div>
         <div class="dec-block">
-          <div class="dec-head">Culling</div>
-          <div class="dec-sub">How hard you cull the bottom of the herd. Culling deep drifts your genetics up over the years but sells cows now and shrinks the herd.</div>
-          <div class="opt-row" id="optCull"></div>
-        </div>
-        <div class="dec-block span2">
-          <div class="dec-head">Cow Market</div>
-          <div class="dec-sub">Buy replacement females outright at the posted price. Registered and elite females raise your herd genetics; commercial females are headcount. A few head against a herd of hundreds moves genetics slowly, the reason a bull is the cheaper lever.</div>
-          <div id="cowMarket"></div>
-        </div>
-        <div class="dec-block">
           <div class="dec-head">Debt</div>
           <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
           <div class="opt-row" id="optDebt"></div>
@@ -727,7 +717,7 @@ async function refreshBoard(world) {
       `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`;
   }).join('');
 
-  renderHerdOptions(); renderCullOptions(); renderCowMarket(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
+  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
   refreshDeals();
 }
