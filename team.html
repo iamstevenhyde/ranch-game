@@ -181,7 +181,7 @@
       <div class="stat-box"><div class="stat-label">Cash</div><div class="stat-val" id="statCash">--</div></div>
       <div class="stat-box"><div class="stat-label">Herd</div><div class="stat-val" id="statHerd">--</div></div>
       <div class="stat-box"><div class="stat-label">County</div><div class="stat-val" id="statCounty" style="font-size:0.9rem">--</div></div>
-      <div class="stat-box"><div class="stat-label">Reputation</div><div class="stat-val" id="statRep">--</div></div>
+      <div class="stat-box"><div class="stat-label"><span class="gloss" id="gsRepLabel" onclick="toggleGloss('gsRepLabel',event)">Reputation<span class="gloss-pop"><b>Reputation</b> (Rep): a 0 to 100 score for your brand standing. Higher reputation earns better prices; fire sales and shortcuts push it down.</span></span></div><div class="stat-val" id="statRep">--</div></div>
     </div>
   </section>
 
@@ -219,23 +219,23 @@
           <div id="techPills"></div>
         </div>
         <div class="dec-block">
-          <div class="dec-head">Buy Genetics (AI semen)</div>
-          <div class="dec-sub">Buy proven AI semen instead of chasing a bull at auction. Cheaper, but it does not always settle.</div>
+          <div class="dec-head">Buy Genetics (<span class="gloss" id="gsAiHead" onclick="toggleGloss('gsAiHead',event)">AI<span class="gloss-pop"><b>AI</b> (Artificial Insemination): breeding cows using purchased bull semen instead of a bull mounting the cow directly. Nothing to do with computer AI.</span></span> semen)</div>
+          <div class="dec-sub">Buy proven <span class="gloss" id="gsAiSub1" onclick="toggleGloss('gsAiSub1',event)">AI<span class="gloss-pop"><b>AI</b> (Artificial Insemination): breeding cows using purchased bull semen instead of a bull mounting the cow directly. Nothing to do with computer AI.</span></span> semen instead of chasing a bull at auction. Cheaper, but it does not always settle.</div>
           <div id="semenOffers"></div>
         </div>
         <div class="dec-block">
           <div class="dec-head">Sell Genetics (your bulls)</div>
-          <div class="dec-sub">Open a proven bull you own to the national semen market and set your price per straw. Demand follows quality and price.</div>
+          <div class="dec-sub">Open a proven bull you own to the national semen market and set your price per <span class="gloss" id="gsStrawSub1" onclick="toggleGloss('gsStrawSub1',event)">straw<span class="gloss-pop"><b>Straw</b>: one frozen dose of bull semen, enough to breed one cow. Sold by the unit.</span></span>. Demand follows quality and price. This is how a <span class="gloss" id="gsSeedstockSub1" onclick="toggleGloss('gsSeedstockSub1',event)">seedstock<span class="gloss-pop"><b>Seedstock</b>: a ranch that sells breeding genetics (bulls and semen) to other ranchers, instead of selling beef.</span></span> ranch makes money: selling genetics instead of beef.</div>
           <div id="semenSell"></div>
         </div>
         <div class="dec-block span2">
-          <div class="dec-head">Rendering / Tallow</div>
-          <div class="dec-sub">Sign a rendering contract to sell tallow off your cull cows. Byproduct income that rises in drought, when you cull more and calf checks shrink.</div>
+          <div class="dec-head">Rendering / <span class="gloss" id="gsTallowHead" onclick="toggleGloss('gsTallowHead',event)">Tallow<span class="gloss-pop"><b>Tallow</b>: beef fat rendered from cull cows, sold for fuel and cosmetics. A rendering plant turns culls into tallow, a byproduct check on the side.</span></span></div>
+          <div class="dec-sub">Sign a rendering contract to sell tallow off your <span class="gloss" id="gsCullSub1" onclick="toggleGloss('gsCullSub1',event)">cull<span class="gloss-pop"><b>Cull</b>: selling off your worst or oldest cows each year to keep herd quality up. The cows you sell off are the culls.</span></span> cows. Byproduct income that rises in drought, when you cull more and calf checks shrink.</div>
           <div id="tallowChoice"></div>
         </div>
         <div class="dec-block span2">
           <div class="dec-head">Deals with Other Teams</div>
-          <div class="dec-sub">Co-opetition: offer a rival a bull, a shared AI straw, a co-funded project, or an embryo share. Talk it over in the room, send the offer, and they accept on their own screen. The trade settles when the year resolves, like your bids.</div>
+          <div class="dec-sub">Co-opetition: offer a rival a bull, a shared <span class="gloss" id="gsAiSub2" onclick="toggleGloss('gsAiSub2',event)">AI<span class="gloss-pop"><b>AI</b> (Artificial Insemination): breeding cows using purchased bull semen instead of a bull mounting the cow directly. Nothing to do with computer AI.</span></span> <span class="gloss" id="gsStrawSub2" onclick="toggleGloss('gsStrawSub2',event)">straw<span class="gloss-pop"><b>Straw</b>: one frozen dose of bull semen, enough to breed one cow. Sold by the unit.</span></span>, a co-funded project, or an embryo share. Talk it over in the room, send the offer, and they accept on their own screen. The trade settles when the year resolves, like your bids.</div>
           <div id="dealsPanel"></div>
         </div>
       </div>
@@ -265,10 +265,12 @@
     <h2>Sealed-Bid Bull Sale <span id="auctionYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
     <div class="card">
       <p style="font-size:0.82rem;color:var(--muted);margin-bottom:0.7rem">
-        Enter a max bid per bull. You win each bull you top, up to your herd sire slots. Your
+        Enter a max bid per bull. You win each bull you top, up to your herd <span class="gloss" id="gsSireIntro" onclick="toggleGloss('gsSireIntro',event)">sire<span class="gloss-pop"><b>Sire</b>: a breeding bull. Your ranch runs only a handful of working bulls at once (sire slots), and each bull typically retires after about 4 years.</span></span> slots. Your
         bids draw on the cash left <strong>after</strong> the operations above, so set your plan
         first. Nothing is final until you lock in the year, and you can revise until the
-        instructor resolves.
+        instructor resolves. The sale is sealed-bid: everyone submits one blind bid, the
+        highest bid above the reserve wins, and the winner pays its own bid amount, so bid
+        your true maximum.
       </p>
       <div id="auctionHerd" style="margin-bottom:0.9rem"></div>
       <div id="bullCards"></div>
@@ -330,6 +332,18 @@ const GLOSSARY = {
   conception: '<b>Conception rate</b>: the share of cows that actually get bred and carry a calf. A natural-service bull settles about 90 percent; AI runs 55 to 65 percent. That gap is the risk you take for cheaper elite genetics.',
   drawdown: '<b>Drawdown</b>: how far your operating equity fell from its peak. A resilience measure: defensive strategies are scored on riding out drought and shocks with a small drawdown.',
   premium: '<b>Brand premium</b>: the extra price your calves fetch above the commodity market because of your reputation and marketing. Seedstock and elite-genetics ranches live on this.',
+  ai: '<b>AI</b> (Artificial Insemination): breeding cows using purchased bull semen instead of a bull mounting the cow directly. Nothing to do with computer AI.',
+  straw: '<b>Straw</b>: one frozen dose of bull semen, enough to breed one cow. Sold by the unit.',
+  sire: '<b>Sire</b>: a breeding bull. Your ranch runs only a handful of working bulls at once (sire slots), and each bull typically retires after about 4 years.',
+  cull: '<b>Cull</b>: selling off your worst or oldest cows each year to keep herd quality up. The cows you sell off are the culls.',
+  head: '<b>Head</b> (hd): one head equals one animal. "hd" is shorthand for counting cattle.',
+  seedstock: '<b>Seedstock</b>: a ranch that sells breeding genetics (bulls and semen) to other ranchers, instead of selling beef.',
+  reputation: '<b>Reputation</b> (Rep): a 0 to 100 score for your brand standing. Higher reputation earns better prices; fire sales and shortcuts push it down.',
+  tallow: '<b>Tallow</b>: beef fat rendered from cull cows, sold for fuel and cosmetics. A rendering plant turns culls into tallow, a byproduct check on the side.',
+  embryo: '<b>Embryo / flush share</b>: paying a partner to move embryos from their best cows into your herd. A one-time genetics upgrade, not an ongoing program.',
+  droughtExposure: '<b>Drought exposure</b>: how hard drought hits your county, as a multiplier on the average. 1.4x means 40 percent worse than average.',
+  distressNote: '<b>Distress note</b>: an emergency loan the game automatically gives you when you run out of cash.',
+  interest: '<b>Interest on debt</b>: the ongoing cost of carrying debt, charged as a percent of what you owe.',
 };
 let _glossId = 0;
 function g(key, label) {
@@ -496,7 +510,7 @@ function renderMarket(ranches) {
     const tr = document.createElement('tr');
     tr.innerHTML =
       `<td>${esc(r.county)}</td><td>${esc(r.region)}</td>` +
-      `<td>${r.herd.toLocaleString()} hd</td>` +
+      `<td>${r.herd.toLocaleString()} ${g('head', 'hd')}</td>` +
       `<td>$${r.ask.toLocaleString()}</td>` +
       `<td><button onclick="buyRanch('${r.id}','${r.county}',${r.ask})">Buy</button></td>`;
     tbody.appendChild(tr);
@@ -546,7 +560,7 @@ async function refreshMyStats() {
 
   document.getElementById('statArchLabel').textContent = '(' + (archInfo?.label || ARCHETYPE) + ')';
   document.getElementById('statCash').textContent = '$' + Math.round(st.cash).toLocaleString();
-  document.getElementById('statHerd').textContent = st.herd.toLocaleString() + ' hd';
+  document.getElementById('statHerd').innerHTML = st.herd.toLocaleString() + ' ' + g('head', 'hd');
   document.getElementById('statCounty').textContent = st.county || '--';
   document.getElementById('statRep').textContent = (st.rep || 0).toFixed(0);
   document.getElementById('secStats').style.display = '';
@@ -690,7 +704,7 @@ async function refreshBoard(world) {
   document.getElementById('boardBanner').innerHTML =
     `<span class="yr">Year ${CUR_YEAR} board meeting</span>` +
     `Your board meets under ${droughtWord} at ${esc(st.county)}, and ${SHOCK_WORD[w.shock] || w.shock}. ` +
-    `The feeder index sits at ${(w.feederIdx || 1).toFixed(2)}, the signal that pulls bull prices with it.`;
+    `The ${g('feederIdx', 'feeder index')} sits at ${(w.feederIdx || 1).toFixed(2)}, the signal that pulls bull prices with it.`;
 
   renderBoardMap(st, w, sev);
 
@@ -742,8 +756,8 @@ function renderTallowChoice() {
   el.innerHTML =
     `<label class="opt${on ? ' on' : ''}" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;min-width:100%">` +
     `<input type="checkbox" ${on ? 'checked' : ''} onchange="setTallow(this.checked)" style="width:auto;margin:0">` +
-    `<span><span class="opt-t">Run a rendering / tallow program</span>` +
-    `<span class="opt-d">~${Math.round(preview.culls)} cull cows, net <b style="color:${preview.net >= 0 ? 'var(--sand)' : '#d99079'}">${money(preview.net)}</b> this year after the $${Math.round(preview.fee).toLocaleString()} ${preview.fee < RanchEngine.TALLOW.contractFee ? 'renewal' : 'setup'} fee.${droughtNote}</span></span></label>`;
+    `<span><span class="opt-t">Run a rendering / ${g('tallow', 'tallow')} program</span>` +
+    `<span class="opt-d">~${Math.round(preview.culls)} ${g('cull', 'cull')} cows, net <b style="color:${preview.net >= 0 ? 'var(--sand)' : '#d99079'}">${money(preview.net)}</b> this year after the $${Math.round(preview.fee).toLocaleString()} ${preview.fee < RanchEngine.TALLOW.contractFee ? 'renewal' : 'setup'} fee.${droughtNote}</span></span></label>`;
 }
 function setTallow(on) { boardChoice.tallow = !!on; renderTallowChoice(); updateConsequence(); }
 
@@ -772,7 +786,7 @@ function renderSemenSell() {
       </div>
       <div id="sellrow_${i}" style="margin-top:0.4rem;${open ? '' : 'display:none'}">
         <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem">
-          <span style="color:var(--dim)">$/straw</span>
+          <span style="color:var(--dim)">$/${g('straw', 'straw')}</span>
           <input type="number" min="5" max="100" value="${price}" style="width:78px;margin:0" oninput="setSemenPrice(${i},this.value)">
           <span style="color:var(--muted)">suggested $${best}</span>
         </div>
@@ -887,7 +901,7 @@ function renderBoardMap(st, w, sev) {
   document.getElementById('boardMap').innerHTML = buildGeoMap({ highlight: st.county, highlightColor: droughtColor(sev) });
   const word = sev >= 1.0 ? 'severe' : sev >= 0.5 ? 'moderate' : 'mild';
   document.getElementById('boardMapLegend').innerHTML =
-    `<span style="color:${droughtColor(sev)};font-weight:bold">&#9679;</span> ${esc((st.county || '').split(',')[0])}: ${word} drought (exposure ${RanchEngine.REGIONS[st.region].droughtExposure}x)`;
+    `<span style="color:${droughtColor(sev)};font-weight:bold">&#9679;</span> ${esc((st.county || '').split(',')[0])}: ${word} drought (${g('droughtExposure', 'exposure')} ${RanchEngine.REGIONS[st.region].droughtExposure}x)`;
 }
 
 function optCard(group, mode, title, desc, on) {
@@ -1046,7 +1060,7 @@ function renderDealTerms() {
   } else if (type === 'semen_split') {
     if (!boardSemen.length) { wrap.innerHTML = `<label>Sire</label><div style="color:var(--muted);font-size:0.8rem">No AI straws offered this year.</div>`; updateDealMeter(); return; }
     const opts = boardSemen.map((s, i) => `<option value="${i}">${esc(s.name)} (${s.tier}, $${s.price.toLocaleString()})</option>`).join('');
-    wrap.innerHTML = `<label>Shared straw (split 50/50)</label><select id="dealSire" onchange="updateDealMeter()">${opts}</select>`;
+    wrap.innerHTML = `<label>Shared ${g('straw', 'straw')} (split 50/50)</label><select id="dealSire" onchange="updateDealMeter()">${opts}</select>`;
   } else if (type === 'infra_coop') {
     if (CUR_YEAR < RanchEngine.UNLOCKS.tech) { wrap.innerHTML = `<label>Project</label><div style="color:var(--muted);font-size:0.8rem">The tech shelf opens in year ${RanchEngine.UNLOCKS.tech}.</div>`; updateDealMeter(); return; }
     const owned = boardBaseSt ? boardBaseSt.tech : new Set();
@@ -1055,7 +1069,7 @@ function renderDealTerms() {
     const opts = avail.map(t => `<option value="${t}">${TECH_LABEL[t]}</option>`).join('');
     wrap.innerHTML = `<label>Co-funded project (same region only)</label><select id="dealTech" onchange="updateDealMeter()">${opts}</select>`;
   } else { // complementor / embryo
-    wrap.innerHTML = `<label>You pay partner $ (your genetics blend toward theirs)</label><input type="number" id="dealPrice" min="0" placeholder="price" style="width:120px" oninput="updateDealMeter()">`;
+    wrap.innerHTML = `<label>${g('embryo', 'Embryo / flush share')}: you pay partner $ (your genetics blend toward theirs)</label><input type="number" id="dealPrice" min="0" placeholder="price" style="width:120px" oninput="updateDealMeter()">`;
   }
   updateDealMeter();
   updateDealSendState();
@@ -1215,7 +1229,7 @@ function renderDebtOptions() {
   if (CUR_YEAR < RanchEngine.UNLOCKS.debt) {
     let html = lockedNote('The credit line opens in year ' + RanchEngine.UNLOCKS.debt +
       '. The bank wants ' + (RanchEngine.UNLOCKS.debt - 1) + ' seasons of operating history before it lends.');
-    if (st.debt > 0) { const pay = Math.min(st.debt, Math.max(0, st.cash - 40000)); html += '<div class="opt-row" style="margin-top:0.45rem">' + optCard('debt', 'pay', 'Pay down', 'Retire ~$' + Math.round(pay).toLocaleString() + ' of the distress note.', boardChoice.debt === 'pay') + optCard('debt', 'hold', 'Hold', 'No change to $' + Math.round(st.debt).toLocaleString() + ' debt.', boardChoice.debt === 'hold') + '</div>'; }
+    if (st.debt > 0) { const pay = Math.min(st.debt, Math.max(0, st.cash - 40000)); html += '<div class="opt-row" style="margin-top:0.45rem">' + optCard('debt', 'pay', 'Pay down', 'Retire ~$' + Math.round(pay).toLocaleString() + ' of the ' + g('distressNote', 'distress note') + '.', boardChoice.debt === 'pay') + optCard('debt', 'hold', 'Hold', 'No change to $' + Math.round(st.debt).toLocaleString() + ' debt.', boardChoice.debt === 'hold') + '</div>'; }
     document.getElementById('optDebt').innerHTML = html;
     return;
   }
@@ -1377,7 +1391,7 @@ function updateExposure() {
   const preOps = (boardBaseSt && typeof boardBaseSt.cash === 'number') ? boardBaseSt.cash : AUCTION_CASH;
   const opsSpend = Math.max(0, preOps - AUCTION_CASH);   // cash committed to operations so far
   const grand = opsSpend + bidTotal;                     // running total of this year's spend
-  const slots = `<b>${AUCTION_SLOTS}</b> sire slot${AUCTION_SLOTS === 1 ? '' : 's'} open`;
+  const slots = `<b>${AUCTION_SLOTS}</b> ${g('sire', 'sire')} slot${AUCTION_SLOTS === 1 ? '' : 's'} open`;
   if (grand <= 0) {
     el.innerHTML = `Cash <b>$${Math.round(AUCTION_CASH).toLocaleString()}</b>, ${slots}. No spending entered yet.`;
     return;
@@ -1494,6 +1508,7 @@ function renderBullCards(bulls, world, st, bidMap) {
           `${esc((b.meta && b.meta.breed) || '')} by ${esc(b.sire)}` +
           ((b.meta && b.meta.consignor) ? `, consigned by ${esc(b.meta.consignor)}` : '') + `</div>` : '') +
       ((b.meta && b.meta.epds) ? `<div style="font-family:var(--mono);font-size:0.66rem;color:var(--dim);margin-bottom:0.5rem">` +
+          g('epd', 'EPD') + ': ' +
           ['ced', 'ww', 'yw', 'milk', 'marb'].filter(k => b.meta.epds[k] !== null && b.meta.epds[k] !== undefined)
             .map(k => k.toUpperCase() + ' ' + b.meta.epds[k]).join(' | ') +
           (bullDollarBeef(b) !== null ? ` <span style="color:var(--accent)">| ${g('dollarBeef', '$B')} ${bullDollarBeef(b)}</span>` : '') + `</div>`
@@ -1502,7 +1517,7 @@ function renderBullCards(bulls, world, st, bidMap) {
         Object.entries(b.catalog).map(([k, v]) => {
           // mark traits where this bull beats your current herd (an upgrade for you)
           const up = herd && v > (herd[k] || 0) + 0.3;
-          return `<div class="epd-bar-wrap">${k}: <span class="epd-bar" style="width:${Math.round(v * 12)}px"></span> ${Number(v).toFixed(1)}` +
+          return `<div class="epd-bar-wrap">${TRAIT_LABEL[k] || k}: <span class="epd-bar" style="width:${Math.round(v * 12)}px"></span> ${Number(v).toFixed(1)}` +
             (up ? ` <span style="color:#2e7d32;font-weight:600">+</span>` : '') + `</div>`;
         }).join('') +
       `</div>` +
@@ -1632,7 +1647,7 @@ async function showResults(world) {
       `<strong style="color:var(--text)">$${Math.round(st.cash).toLocaleString()}</strong>, ` +
       `debt $${Math.round(st.debt).toLocaleString()}, ${g('dollarBeef', '$Beef')} ${RanchEngine.dollarBeef(st.g)}, reputation ${Math.round(st.rep)}.</div>`;
     if (st.lastBullDeaths > 0) {
-      html += `<div style="font-size:0.82rem;color:#d99079;margin-top:0.3rem">You lost ${st.lastBullDeaths} herd bull${st.lastBullDeaths > 1 ? 's' : ''} this year. That coverage is gone until you buy or trade for a replacement.</div>`;
+      html += `<div style="font-size:0.82rem;color:#d99079;margin-top:0.3rem">You lost ${st.lastBullDeaths} herd bull${st.lastBullDeaths > 1 ? 's' : ''} this year. That ${g('coverage', 'coverage')} is gone until you buy or trade for a replacement.</div>`;
     }
     html += booksCard(st, world);
   }
@@ -1715,7 +1730,7 @@ function robustnessReplay(st, world) {
   }).join('');
   return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
     `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">Robustness Check: Same Ranch, Three Weathers</div>` +
-    `<div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.6rem">Your ranch as it stands, run one more year against three drought draws. A tight spread means a robust operation; a wide one means you were optimized for the weather you happened to get.</div>` +
+    `<div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.6rem">Your ranch as it stands, run one more year against three drought draws. A tight spread means a robust operation with a small ${g('drawdown', 'drawdown')}; a wide one means you were optimized for the weather you happened to get.</div>` +
     `<table style="width:100%;font-size:0.82rem"><thead><tr><th>Scenario</th><th>Year net</th><th>Herd</th><th>Equity</th></tr></thead><tbody>${rows}</tbody></table></div>`;
 }
 
@@ -1743,13 +1758,13 @@ function booksCard(st, w) {
       `<table class="bs-table" style="width:100%;font-size:0.8rem">` +
       row('Calf and beef sales', s.revenue) +
       (s.semenRoyalty ? row('Semen sales, net' + (s.semenStraws ? ' (' + s.semenStraws.toLocaleString() + ' straws)' : ''), s.semenRoyalty) : '') +
-      (s.tallowNet ? row('Tallow, net' + (s.tallowCulls ? ' (' + s.tallowCulls.toLocaleString() + ' culls)' : ''), s.tallowNet) : '') +
+      (s.tallowNet ? row('Tallow, net' + (s.tallowCulls ? ' (' + s.tallowCulls.toLocaleString() + ' ' + g('cull', 'culls') + ')' : ''), s.tallowNet) : '') +
       row('Cow and feed costs', -s.cowCost) +
       row('Labor', -s.labor) +
       row('Overhead', -s.overhead) +
       row('Herd-bull replacement', -s.bullCost) +
       (s.breeding > 0 ? row('Bull development', -s.breeding) : '') +
-      (s.interest > 0 ? row(g('equity', 'Interest on debt'), -s.interest) : '') +
+      (s.interest > 0 ? row(g('interest', 'Interest on debt'), -s.interest) : '') +
       row('Net for the year', s.net, { rule: true, strong: true }) +
       `</table></div>`;
   }
@@ -1812,21 +1827,21 @@ function cattlemensWeekly(w, bulls, teams, myState, nameById) {
   const outlook = yearDone ? '' :
     `<div style="font-size:0.82rem;margin-top:0.55rem"><b>Analyst outlook for year ${CUR_YEAR + 1}:</b> ` +
     `drought odds ${Math.round(t.severe * 100)}% severe / ${Math.round(t.moderate * 100)}% moderate / ${Math.round(mildP * 100)}% mild. ` +
-    `Feeder index called at <b style="font-family:var(--mono)">${call.toFixed(2)}</b> ` +
+    `${g('feederIdx', 'Feeder index')} called at <b style="font-family:var(--mono)">${call.toFixed(2)}</b> ` +
     `(range ${(call * 0.90).toFixed(2)} to ${(call * 1.10).toFixed(2)})` +
     (echo > 0 ? ', lifted by the post-drought herd rebuild.' : echo < 0 ? ', soft on drought liquidation.' : '.') +
     ` <span style="color:var(--muted)">No analyst prints next year's shock.</span></div>`;
   return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
     `<div style="font-family:var(--serif);font-weight:700;font-size:1.02rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.5rem">` +
     `The Cattlemen's Weekly <span style="font-family:var(--mono);font-weight:400;font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">YEAR ${CUR_YEAR} WRAP</span></div>` +
-    `<div style="font-size:0.82rem">Feeder index closed at <b style="font-family:var(--mono)">${(w.feederIdx || 1).toFixed(2)}</b> ` +
+    `<div style="font-size:0.82rem">${g('feederIdx', 'Feeder index')} closed at <b style="font-family:var(--mono)">${(w.feederIdx || 1).toFixed(2)}</b> ` +
     `(${dF >= 0 ? '+' : ''}${dF.toFixed(0)}% on the year) under ${esc(SHOCK_WORD[w.shock] || w.shock)}, ${esc(w.drought)} drought conditions. ` +
-    (w.tallowIdx ? `The tallow index sat at <b style="font-family:var(--mono)">${w.tallowIdx.toFixed(2)}</b>, on its own cycle apart from cattle. ` : '') +
+    (w.tallowIdx ? `The ${g('tallow', 'tallow')} index sat at <b style="font-family:var(--mono)">${w.tallowIdx.toFixed(2)}</b>, on its own cycle apart from cattle. ` : '') +
     (sold.length
       ? `The bull sale grossed <b style="font-family:var(--mono)">$${Math.round(gross).toLocaleString()}</b> on ${sold.length} of ${bulls.length} lots` +
         (top ? `, topped by ${esc(top.name || top.sire)} at <b style="font-family:var(--mono)">$${Math.round(top.price).toLocaleString()}</b> to ${esc(nameById[top.winner_team] || 'a ranch')}.` : `.`)
       : `Every lot in the bull sale went home unsold, a no-sale year.`) + `</div>` +
-    `<table style="margin-top:0.55rem;font-size:0.8rem"><thead><tr><th>Outfit</th><th>Herd</th><th>Herd sires</th><th>Rep</th></tr></thead>` +
+    `<table style="margin-top:0.55rem;font-size:0.8rem"><thead><tr><th>Outfit</th><th>Herd</th><th>Herd sires</th><th>${g('reputation', 'Rep')}</th></tr></thead>` +
     `<tbody>${rows}</tbody></table>` +
     books + outlook + `</div>`;
 }
