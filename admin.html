@@ -44,6 +44,10 @@
   .tag-premium { background: #ede9fe; color: #5b21b6; }
   .tag-mid { background: #e0f2fe; color: #075985; }
   .tag-commercial { background: #f1f5f9; color: #475569; }
+  .tag-ready { background: #def7ec; color: #1a7a4a; }
+  .tag-waiting { background: #fef3c7; color: #92400e; }
+  .ready-summary { display: inline-block; font-size: 0.9rem; font-weight: bold; padding: 0.3rem 0.8rem; border-radius: 4px; margin-bottom: 0.8rem; background: #f1f5f9; color: var(--muted); }
+  .ready-summary.all-ready { background: #def7ec; color: #1a7a4a; }
   #msg { padding: 0.5rem 1rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.85rem; display: none; }
   #msg.ok { background: #def7ec; color: #1a7a4a; display: block; }
   #msg.err { background: #fde8e8; color: #c81e1e; display: block; }
@@ -119,6 +123,7 @@
         Teams set operations (expand/destock, debt, technology, semen) and place sealed bids on
         one page, then lock in. AI ranches have already decided. Resolve the year when teams are ready.
       </p>
+      <div id="boardReadySummary" class="ready-summary">Teams ready: 0 / 0</div>
       <table id="tblBoard">
         <thead><tr><th>Team</th><th>Type</th><th>Locked in</th></tr></thead>
         <tbody id="tbodyBoard"></tbody>
@@ -166,7 +171,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=fe5d2016bb"></script>
+<script src="engine.js?v=4136592f1c"></script>
 <script>
 'use strict';
 
@@ -539,15 +544,23 @@ async function refreshBoard() {
   tbody.innerHTML = '';
   const humans = TEAMS.filter(t => !t.is_ai);
   TEAMS.forEach(t => {
-    const set = t.is_ai ? 'AI decided' : (submitted.has(t.id) ? 'Yes' : 'waiting');
+    const badge = t.is_ai
+      ? '<span class="tag tag-ai">AI decided</span>'
+      : (submitted.has(t.id) ? '<span class="tag tag-ready">READY</span>' : '<span class="tag tag-waiting">WAITING</span>');
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td>${esc(t.name)}</td><td>${t.is_ai ? 'AI' : 'Human'}</td><td>${set}</td>`;
+    tr.innerHTML = `<td>${esc(t.name)}</td><td>${t.is_ai ? 'AI' : 'Human'}</td><td>${badge}</td>`;
     tbody.appendChild(tr);
   });
   const waiting = humans.filter(t => !submitted.has(t.id)).length;
+  const readyCount = humans.length - waiting;
   document.getElementById('boardStatus').textContent = waiting === 0
     ? 'All human teams have locked in operations and bids. Ready to resolve the year.'
     : waiting + ' of ' + humans.length + ' human teams still deciding (operations + bids on one page).';
+  const summaryEl = document.getElementById('boardReadySummary');
+  summaryEl.textContent = (waiting === 0 && humans.length > 0)
+    ? 'All teams ready (' + readyCount + ' / ' + humans.length + ')'
+    : 'Teams ready: ' + readyCount + ' / ' + humans.length;
+  summaryEl.classList.toggle('all-ready', waiting === 0 && humans.length > 0);
 }
 
 // ---- Auction monitor ----

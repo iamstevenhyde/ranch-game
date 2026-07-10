@@ -45,7 +45,7 @@
   button:hover { background: #a5651f; }
   button:disabled { background: #4a4034; color: #877a62; cursor: default; }
   button.secondary { background: var(--sage); color: #12160a; }
-  #msg { padding: 0.45rem 0.9rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.84rem; display: none; }
+  #msg { position: fixed; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 1000; max-width: 92vw; padding: 0.55rem 1rem; border-radius: 6px; font-size: 0.9rem; display: none; box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
   #msg.ok  { background: #26301a; color: #acc87a; display: block; border: 1px solid #3c4a26; }
   #msg.err { background: #351d18; color: #d99079; display: block; border: 1px solid #5a3128; }
   table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
@@ -106,6 +106,7 @@
   .deal-form select, .deal-form input { margin: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 4px; padding: 0.45rem 0.55rem; font-family: var(--mono); font-size: 0.86rem; background: var(--surface); color: var(--text); }
   .deal-terms { grid-column: 1 / -1; }
   .deal-send { grid-column: 1 / -1; justify-self: end; min-width: 150px; }
+  .deal-send:disabled { opacity: 0.45; cursor: not-allowed; }
   @media (max-width: 560px) { .deal-form { grid-template-columns: 1fr; } }
   .deal-card { border: 1px solid var(--border); border-radius: 5px; background: var(--surface2); padding: 0.5rem 0.7rem; margin-bottom: 0.4rem; font-size: 0.82rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
   .deal-card .deal-actions { margin-left: auto; display: flex; gap: 0.4rem; }
@@ -207,11 +208,6 @@
           <div class="dec-sub">Buy or sell cows for the year. Irreversible before the shock hits.</div>
           <div class="opt-row" id="optHerd"></div>
         </div>
-        <div class="dec-block span2">
-          <div class="dec-head">Cow Market</div>
-          <div class="dec-sub">Buy replacement females outright at the posted price. Registered and elite females raise your herd genetics; commercial females are headcount. A few head against a herd of hundreds moves genetics slowly, the reason a bull is the cheaper lever.</div>
-          <div id="cowMarket"></div>
-        </div>
         <div class="dec-block">
           <div class="dec-head">Debt</div>
           <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
@@ -310,7 +306,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=fe5d2016bb"></script>
+<script src="engine.js?v=4136592f1c"></script>
 <!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
 <script src="assets/bulls/manifest.js?v=2"></script>
 <script src="county-geo.js?v=b95a77d815"></script>
@@ -360,10 +356,13 @@ let submittedBids = {};  // bull_id -> true
 
 const POLL_MS = 4000;
 
+let _msgTimer = null;
 function msg(text, type) {
   const el = document.getElementById('msg');
   el.textContent = text;
-  el.className = type;
+  el.className = text ? type : '';
+  if (_msgTimer) { clearTimeout(_msgTimer); _msgTimer = null; }
+  if (text) _msgTimer = setTimeout(() => { el.textContent = ''; el.className = ''; }, 5000);
 }
 
 function setPhaseChip(phase) {
@@ -725,7 +724,7 @@ async function refreshBoard(world) {
       `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`;
   }).join('');
 
-  renderHerdOptions(); renderCowMarket(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
+  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
   refreshDeals();
 }
@@ -979,7 +978,7 @@ function setCowBuy(tier, delta) {
 // clobbers it. turn_team tracks whose move it is; counters bounce the price back and forth.
 // The value meter shows NEUTRAL market value (tier anchor) vs the offered price.
 let dealTeams = [], myDeals = [];
-const DEAL_TYPE_LABEL = { bull_trade: 'Trade a bull', semen_split: 'Split an AI straw', infra_coop: 'Co-fund a project', complementor: 'Embryo / flush share' };
+const DEAL_TYPE_LABEL = { bull_trade: 'Sell a bull', semen_split: 'Split an AI straw', infra_coop: 'Co-fund a project', complementor: 'Embryo / flush share' };
 async function refreshDeals() {
   if (!GAME_ID || !TEAM_ID) return;
   const [{ data: teams }, { data: deals }] = await Promise.all([
@@ -988,8 +987,16 @@ async function refreshDeals() {
   ]);
   dealTeams = (teams || []).map(t => ({ id: t.id, name: t.name, region: t.state && t.state.region }));
   myDeals = (deals || []).filter(d => d.proposer_team === TEAM_ID || d.partner_team === TEAM_ID);
+  // notify when a deal becomes accepted (both parties see it: the accepter right away, the
+  // proposer on the next poll). Fires once per deal.
+  myDeals.filter(d => d.status === 'accepted' && !notifiedAccepted.has(d.id)).forEach(d => {
+    notifiedAccepted.add(d.id);
+    const who = dealNameById()[counterpart(d)] || 'A team';
+    msg('Trade with ' + who + ' is set. It settles when the year resolves.', 'ok');
+  });
   if (document.getElementById('dealForm')) renderDealLists(); else renderDealsPanel();
 }
+let notifiedAccepted = new Set();
 function dealNameById() { return Object.fromEntries(dealTeams.map(t => [t.id, t.name])); }
 function myRegion() { return boardBaseSt && boardBaseSt.region; }
 function counterpart(d) { return d.proposer_team === TEAM_ID ? d.partner_team : d.proposer_team; }
@@ -1009,7 +1016,7 @@ function renderDealsPanel() {
       `<div class="deal-field"><label>Deal</label><select id="dealType" onchange="onDealTypeChange()">${typeOpts}</select></div>` +
       `<div class="deal-field"><label>Partner</label><select id="dealPartner"></select></div>` +
       `<div class="deal-field deal-terms" id="dealTerms"></div>` +
-      `<button type="button" class="deal-send" onclick="proposeDeal()">Send offer</button>` +
+      `<button type="button" id="dealSend" class="deal-send" onclick="proposeDeal()">Send offer</button>` +
     `</div>` +
     `<div class="deal-meter" id="dealMeter"></div>` +
     `<div id="dealLists"></div>`;
@@ -1051,6 +1058,22 @@ function renderDealTerms() {
     wrap.innerHTML = `<label>You pay partner $ (your genetics blend toward theirs)</label><input type="number" id="dealPrice" min="0" placeholder="price" style="width:120px" oninput="updateDealMeter()">`;
   }
   updateDealMeter();
+  updateDealSendState();
+}
+// disable Send offer (with a reason) when the chosen deal type has nothing to offer this year,
+// so the button never silently no-ops (Steven 7/09: "send offer does not work")
+function updateDealSendState() {
+  const btn = document.getElementById('dealSend'); if (!btn) return;
+  const type = (document.getElementById('dealType') || {}).value;
+  let ok = true, why = '';
+  if (type === 'bull_trade') { ok = !!document.getElementById('dealBull'); why = 'You own no bulls to sell yet.'; }
+  else if (type === 'semen_split') { ok = !!document.getElementById('dealSire'); why = 'No AI straws are offered this year.'; }
+  else if (type === 'infra_coop') {
+    ok = !!document.getElementById('dealTech') && !!(document.getElementById('dealPartner') || {}).value;
+    why = document.getElementById('dealTech') ? 'No team in your region to co-fund with.' : 'No project available to co-fund yet.';
+  }
+  btn.disabled = !ok;
+  btn.title = ok ? '' : why;
 }
 // neutral market-value meter for the draft offer
 function updateDealMeter() {
@@ -1350,17 +1373,22 @@ function updateExposure() {
   const el = document.getElementById('auctionExposure');
   if (!el) return;
   const bids = bidInputs();
-  const total = bids.reduce((s, x) => s + x, 0);
-  if (!bids.length) {
-    el.innerHTML = `Cash <b>$${Math.round(AUCTION_CASH).toLocaleString()}</b>, ` +
-      `<b>${AUCTION_SLOTS}</b> sire slot${AUCTION_SLOTS === 1 ? '' : 's'} open. No bids in yet.`;
+  const bidTotal = bids.reduce((s, x) => s + x, 0);
+  const preOps = (boardBaseSt && typeof boardBaseSt.cash === 'number') ? boardBaseSt.cash : AUCTION_CASH;
+  const opsSpend = Math.max(0, preOps - AUCTION_CASH);   // cash committed to operations so far
+  const grand = opsSpend + bidTotal;                     // running total of this year's spend
+  const slots = `<b>${AUCTION_SLOTS}</b> sire slot${AUCTION_SLOTS === 1 ? '' : 's'} open`;
+  if (grand <= 0) {
+    el.innerHTML = `Cash <b>$${Math.round(AUCTION_CASH).toLocaleString()}</b>, ${slots}. No spending entered yet.`;
     return;
   }
-  const over = total > AUCTION_CASH;
+  const over = bidTotal > AUCTION_CASH;
+  const opsBit = opsSpend > 0 ? `operations <b>$${Math.round(opsSpend).toLocaleString()}</b> + ` : '';
   el.innerHTML =
-    `Cash <b>$${Math.round(AUCTION_CASH).toLocaleString()}</b>, <b>${AUCTION_SLOTS}</b> sire slot${AUCTION_SLOTS === 1 ? '' : 's'} open. ` +
-    `If every bid on this page wins you spend <b style="${over ? 'color:#d99079' : ''}">$${Math.round(total).toLocaleString()}</b>` +
-    (over ? ` <span style="color:#d99079">(more than you have: the sale can bust you)</span>.` : `.`);
+    `Cash <b>$${Math.round(AUCTION_CASH).toLocaleString()}</b>, ${slots}.<br>` +
+    `Spending this year: ${opsBit}bids <b style="${over ? 'color:#d99079' : ''}">$${Math.round(bidTotal).toLocaleString()}</b> = ` +
+    `<b>$${Math.round(grand).toLocaleString()}</b> total.` +
+    (over ? ` <span style="color:#d99079">Bids exceed your cash: the sale can bust you.</span>` : ``);
 }
 
 async function refreshAuction(world) {
