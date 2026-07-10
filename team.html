@@ -169,7 +169,7 @@
     <h2>Lobby</h2>
     <div class="card">
       <p>You are in the lobby. Waiting for the instructor to start the game.</p>
-      <p style="margin-top:0.6rem;font-size:0.85rem;color:var(--muted)">Your archetype will be revealed when the market opens.</p>
+      <p style="margin-top:0.6rem;font-size:0.85rem;color:var(--muted)">You will pick your ranch and your strategy when the market opens.</p>
       <div id="lobbyTeamList" style="margin-top:0.8rem;font-size:0.85rem;color:var(--muted)"></div>
     </div>
   </section>
@@ -249,14 +249,18 @@
     <h2>Ranch Market</h2>
     <div class="card">
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.8rem">
-        Your secret objective is the <strong><span id="archetypeLabel">--</span></strong> strategy.
-        Click a ranch on the map or in the list. The one you buy is your endowment for the game.
+        Pick a ranch and the strategy you will run it under. Each ranch shows the strategy
+        it is run under today; keep it or choose your own. Your strategy is your scorecard
+        and it locks in when you buy.
       </p>
       <div class="mini-map" id="marketMap" style="margin-bottom:0.9rem"></div>
-      <table id="tblMarket">
-        <thead><tr><th>County</th><th>Region</th><th>Herd</th><th>Ask</th><th>Action</th></tr></thead>
-        <tbody id="tbodyMarket"></tbody>
-      </table>
+      <div style="overflow-x:auto">
+        <table id="tblMarket">
+          <thead><tr><th>Ranch</th><th>County</th><th>Region</th><th>Herd</th><th>Ask</th><th>Cash left</th><th>Strategy</th><th>Action</th></tr></thead>
+          <tbody id="tbodyMarket"></tbody>
+        </table>
+      </div>
+      <div id="buyConfirm" style="display:none"></div>
     </div>
   </section>
 
@@ -458,7 +462,6 @@ async function handlePhaseChange(game) {
   if (mainEl) mainEl.classList.toggle('control', PHASE === 'board' || PHASE === 'auction');
 
   if (PHASE === 'market') {
-    document.getElementById('archetypeLabel').textContent = RanchEngine.ARCHETYPES[ARCHETYPE]?.label || ARCHETYPE;
     showOnly(['secMarket', 'secStats']);
     await refreshMarket();
     await refreshMyStats();
@@ -494,6 +497,25 @@ async function refreshMarket() {
   renderMarket(ranches || []);
 }
 
+const RANCH_NAMES = ['Two Dot Land & Cattle', 'Cottonwood Bench Ranch', 'Antelope Springs Cattle', 'Red Mesa Livestock', 'Willow Draw Ranch', 'Bitterroot Cattle Co.', 'Dry Fork Land & Cattle', 'Broken Wheel Ranch', 'Alkali Flat Cattle', 'Cedar Gap Livestock', 'Sundown Mesa Ranch', 'Lost Creek Cattle'];
+// what strategy this listing is being run under today (the "house" strategy): score it
+// against every non-probe archetype's buy policy and take the best fit.
+function houseStrategy(r) {
+  const asks = marketRanches.map(x => x.ask).sort((a, b) => a - b);
+  const medianAsk = asks.length ? asks[Math.floor(asks.length / 2)] : r.ask;
+  // DB rows use land_cap; the buy policies read landCap. Normalize so every archetype scores.
+  const listing = Object.assign({}, r, { landCap: (r.landCap != null ? r.landCap : r.land_cap) });
+  const keys = Object.keys(RanchEngine.ARCHETYPES).filter(k => !RanchEngine.ARCHETYPES[k].probe);
+  let best = keys[0], bestScore = -Infinity;
+  for (const k of keys) {
+    try {
+      const score = RanchEngine.BUY_POLICY[k](listing, { left: RanchEngine.START_CASH - listing.ask, reg: RanchEngine.REGIONS[listing.region], medianAsk });
+      if (typeof score === 'number' && !isNaN(score) && score > bestScore) { bestScore = score; best = k; }
+    } catch (e) { /* skip a policy that throws for this listing */ }
+  }
+  return best;
+}
+
 let marketRanches = [];
 function renderMarket(ranches) {
   marketRanches = ranches || [];
@@ -503,27 +525,63 @@ function renderMarket(ranches) {
   const tbody = document.getElementById('tbodyMarket');
   tbody.innerHTML = '';
   if (!marketRanches.length) {
-    tbody.innerHTML = '<tr><td colspan="5"><em>No ranches available. You may have already purchased one.</em></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8"><em>No ranches available. You may have already purchased one.</em></td></tr>';
     return;
   }
-  marketRanches.forEach(r => {
+  marketRanches.forEach((r, i) => {
+    r._name = RANCH_NAMES[i % RANCH_NAMES.length];
+    r._house = houseStrategy(r);
     const tr = document.createElement('tr');
     tr.innerHTML =
-      `<td>${esc(r.county)}</td><td>${esc(r.region)}</td>` +
+      `<td>${esc(r._name)}</td><td>${esc(r.county)}</td><td>${esc(r.region)}</td>` +
       `<td>${r.herd.toLocaleString()} ${g('head', 'hd')}</td>` +
       `<td>$${r.ask.toLocaleString()}</td>` +
-      `<td><button onclick="buyRanch('${r.id}','${r.county}',${r.ask})">Buy</button></td>`;
+      `<td>$${(RanchEngine.START_CASH - r.ask).toLocaleString()}</td>` +
+      `<td>${esc(RanchEngine.ARCHETYPES[r._house]?.label || r._house)}</td>` +
+      `<td><button onclick="openBuyConfirm('${r.id}')">Buy</button></td>`;
     tbody.appendChild(tr);
   });
 }
-// clicking a county on the market map buys that listing (same path as the table button)
+// clicking a county on the market map opens the same buy-confirm card as the table button
 function pickRanchByCounty(county) {
   const r = marketRanches.find(x => x.county === county);
-  if (r) buyRanch(r.id, r.county, r.ask);
+  if (r) openBuyConfirm(r.id);
 }
 
-async function buyRanch(ranchId, county, ask) {
-  if (!confirm('Buy ' + county + ' for $' + Number(ask).toLocaleString() + '?')) return;
+// ---- Inline buy confirmation (replaces the native confirm dialog): pick a strategy,
+// defaulted to the ranch's house strategy, then lock it in on purchase.
+function openBuyConfirm(ranchId) {
+  const r = marketRanches.find(x => x.id === ranchId);
+  if (!r) return;
+  const keys = Object.keys(RanchEngine.ARCHETYPES).filter(k => !RanchEngine.ARCHETYPES[k].probe);
+  const options = keys.map(k =>
+    `<option value="${k}"${k === r._house ? ' selected' : ''}>${esc(RanchEngine.ARCHETYPES[k].label)}</option>`).join('');
+  const el = document.getElementById('buyConfirm');
+  el.innerHTML =
+    `<div class="card" style="margin-top:0.8rem;background:var(--surface2)">` +
+    `<div style="font-weight:700;font-size:0.95rem;color:var(--tan);margin-bottom:0.3rem">${esc(r._name)}</div>` +
+    `<div style="font-size:0.82rem;color:var(--dim);margin-bottom:0.6rem">${esc(r.county)} &middot; ${r.herd.toLocaleString()} ${g('head', 'hd')} &middot; Ask $${r.ask.toLocaleString()} &middot; Cash left $${(RanchEngine.START_CASH - r.ask).toLocaleString()}</div>` +
+    `<label for="buyStrategy">Strategy</label>` +
+    `<select id="buyStrategy">${options}</select>` +
+    `<p style="font-size:0.76rem;color:var(--muted);margin:0.3rem 0 0.7rem">This is your scorecard: the strategy your ranch is graded on.</p>` +
+    `<div style="display:flex;gap:0.6rem">` +
+    `<button onclick="confirmBuy('${r.id}')">Confirm Buy</button>` +
+    `<button class="secondary" onclick="document.getElementById('buyConfirm').style.display='none'">Cancel</button>` +
+    `</div></div>`;
+  el.style.display = '';
+  el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function confirmBuy(ranchId) {
+  const r = marketRanches.find(x => x.id === ranchId);
+  if (!r) return;
+  const strat = document.getElementById('buyStrategy').value;
+  ARCHETYPE = strat;
+  buyRanch(r.id, r.county, r.ask, strat);
+}
+
+async function buyRanch(ranchId, county, ask, strategy) {
+  ARCHETYPE = strategy;
 
   // Mark ranch bought
   const { error: rErr } = await supa.from('ranches').update({ bought_by: TEAM_ID }).eq('id', ranchId).is('bought_by', null);
@@ -531,7 +589,7 @@ async function buyRanch(ranchId, county, ask) {
 
   // Build initial ranch state from engine
   const { data: ranchRow } = await supa.from('ranches').select('*').eq('id', ranchId).single();
-  const ranchState = RanchEngine.makeRanch(ARCHETYPE, {
+  const ranchState = RanchEngine.makeRanch(strategy, {
     county: ranchRow.county, region: ranchRow.region,
     herd: ranchRow.herd, ask: ranchRow.ask, landCap: ranchRow.land_cap,
   });
@@ -541,11 +599,14 @@ async function buyRanch(ranchId, county, ask) {
   ranchState.cash0 = ranchState.cash;
   ranchState.eq0 = RanchEngine.equity(ranchState, w0);
   ranchState.peakEquity = ranchState.eq0 - ranchState.cash0;
-  await supa.from('teams').update({ state: JSON.parse(JSON.stringify(ranchState, setReplacer)) }).eq('id', TEAM_ID);
+  await supa.from('teams').update({
+    state: JSON.parse(JSON.stringify(ranchState, setReplacer)), archetype: strategy,
+  }).eq('id', TEAM_ID);
   myRanchId = ranchId;
 
-  await logDecision('ranch_purchase', { ranch_id: ranchId, county, ask });
+  await logDecision('ranch_purchase', { ranch_id: ranchId, county, ask, strategy });
 
+  document.getElementById('buyConfirm').style.display = 'none';
   document.getElementById('secMarket').style.display = 'none';
   await refreshMyStats();
   msg('Ranch purchased. Waiting for auction.', 'ok');
@@ -554,7 +615,17 @@ async function buyRanch(ranchId, county, ask) {
 // ---- My stats ----
 async function refreshMyStats() {
   const { data: team } = await supa.from('teams').select('*').eq('id', TEAM_ID).single();
-  if (!team || !team.state) return;
+  if (!team || !team.state) {
+    // no ranch bought yet: show the starting stake so the player knows what they are
+    // working with before they commit to a ranch and a strategy
+    document.getElementById('statArchLabel').textContent = '';
+    document.getElementById('statCash').textContent = '$' + RanchEngine.START_CASH.toLocaleString();
+    document.getElementById('statHerd').textContent = '--';
+    document.getElementById('statCounty').textContent = 'not bought yet';
+    document.getElementById('statRep').textContent = '--';
+    document.getElementById('secStats').style.display = '';
+    return;
+  }
   const st = reviveState(team.state);
   const archInfo = RanchEngine.ARCHETYPES[ARCHETYPE];
 
