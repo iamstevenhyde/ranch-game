@@ -183,10 +183,6 @@
       <div class="stat-box"><div class="stat-label">County</div><div class="stat-val" id="statCounty" style="font-size:0.9rem">--</div></div>
       <div class="stat-box"><div class="stat-label"><span class="gloss" id="gsRepLabel" onclick="toggleGloss('gsRepLabel',event)">Reputation<span class="gloss-pop"><b>Reputation</b> (Rep): a 0 to 100 score for your brand standing. Higher reputation earns better prices; fire sales and shortcuts push it down.</span></span></div><div class="stat-val" id="statRep">--</div></div>
     </div>
-    <div style="margin-top:0.7rem">
-      <button id="btnSwitchStrat" class="secondary" style="display:none;font-size:0.82rem" onclick="openSwitchStrategy()">Change strategy</button>
-      <div id="switchStrategy"></div>
-    </div>
   </section>
 
   <!-- Board Meeting: set operations for the year -->
@@ -564,7 +560,7 @@ function openBuyConfirm(ranchId) {
     `<div style="font-weight:700;font-size:0.95rem;color:var(--tan);margin-bottom:0.3rem">${esc(r._name)}</div>` +
     `<div style="font-size:0.82rem;color:var(--dim);margin-bottom:0.6rem">${esc(r.county)} &middot; ${r.herd.toLocaleString()} ${g('head', 'hd')} &middot; Ask $${r.ask.toLocaleString()} &middot; Cash left $${(RanchEngine.START_CASH - r.ask).toLocaleString()}</div>` +
     `<div style="margin-bottom:0.3rem">Strategy: <strong style="color:var(--tan)">${esc(stratLabel)}</strong></div>` +
-    `<p style="font-size:0.76rem;color:var(--muted);margin:0.1rem 0 0.7rem">This ranch is run as ${esc(stratLabel)}, so that becomes the strategy you are graded on. You can change it later from your ranch panel, but switching costs 15 reputation.</p>` +
+    `<p style="font-size:0.76rem;color:var(--muted);margin:0.1rem 0 0.7rem">This ranch is run as ${esc(stratLabel)}, so that becomes the strategy you are graded on for the game. How you play is your call, but your scorecard is set when you buy.</p>` +
     `<div style="display:flex;gap:0.6rem">` +
     `<button onclick="confirmBuy('${r.id}')">Confirm Buy</button>` +
     `<button class="secondary" onclick="document.getElementById('buyConfirm').style.display='none'">Cancel</button>` +
@@ -636,50 +632,6 @@ async function refreshMyStats() {
   document.getElementById('statCounty').textContent = st.county || '--';
   document.getElementById('statRep').textContent = (st.rep || 0).toFixed(0);
   document.getElementById('secStats').style.display = '';
-  document.getElementById('btnSwitchStrat').style.display = '';
-}
-
-// ---- Change strategy mid-game: repositioning is not free, it costs reputation (Steven 7/09) ----
-const REP_SWITCH_COST = 15;
-async function openSwitchStrategy() {
-  const el = document.getElementById('switchStrategy');
-  const { data: team } = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
-  const rep = (team && team.state && typeof team.state.rep === 'number') ? Math.round(team.state.rep) : 0;
-  const keys = Object.keys(RanchEngine.ARCHETYPES).filter(k => !RanchEngine.ARCHETYPES[k].probe);
-  const options = keys.map(k => `<option value="${k}"${k === ARCHETYPE ? ' selected' : ''}>${esc(RanchEngine.ARCHETYPES[k].label)}</option>`).join('');
-  el.innerHTML =
-    `<div class="card" style="margin-top:0.6rem;background:var(--surface2)">` +
-    `<label for="switchStratSel">New strategy</label>` +
-    `<select id="switchStratSel">${options}</select>` +
-    `<p style="font-size:0.76rem;color:var(--muted);margin:0.3rem 0 0.6rem">Switching the strategy you are graded on costs ${REP_SWITCH_COST} reputation. You have ${rep}.</p>` +
-    `<div style="display:flex;gap:0.6rem">` +
-    `<button onclick="confirmSwitch()">Confirm change</button>` +
-    `<button class="secondary" onclick="document.getElementById('switchStrategy').style.display='none'">Cancel</button>` +
-    `</div></div>`;
-  el.style.display = '';
-}
-async function confirmSwitch() {
-  const newStrat = document.getElementById('switchStratSel').value;
-  const el = document.getElementById('switchStrategy');
-  if (newStrat === ARCHETYPE) { el.style.display = 'none'; el.innerHTML = ''; msg('That is already your strategy.', 'ok'); return; }
-  const { data: team } = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
-  if (!team || !team.state) { msg('Buy a ranch first.', 'err'); return; }
-  const st = team.state;   // raw stored form; only key + rep change, so no re-serialization needed
-  st.key = newStrat;
-  st.rep = Math.max(0, (typeof st.rep === 'number' ? st.rep : 0) - REP_SWITCH_COST);
-  const { error } = await supa.from('teams').update({ state: st, archetype: newStrat }).eq('id', TEAM_ID);
-  if (error) { msg('Could not change strategy: ' + error.message, 'err'); return; }
-  ARCHETYPE = newStrat;
-  el.style.display = 'none'; el.innerHTML = '';
-  await logDecision('strategy_switch', { to: newStrat, rep_cost: REP_SWITCH_COST });
-  msg('Strategy changed to ' + (RanchEngine.ARCHETYPES[newStrat]?.label || newStrat) + '. Reputation -' + REP_SWITCH_COST + '.', 'ok');
-  // rebuild the current screen from the updated state so the mandate, coaching and scoring follow
-  if ((PHASE === 'board' || PHASE === 'auction') && boardWorld) {
-    try { localStorage.removeItem(boardKey()); } catch (e) {}
-    await refreshBoard(boardWorld);
-    await refreshAuction(boardWorld);
-  }
-  await refreshMyStats();
 }
 
 // ---- Board Meeting ----
