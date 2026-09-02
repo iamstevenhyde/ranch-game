@@ -141,6 +141,17 @@
   .bs-table tr.rule td { border-top: 1px solid var(--border); }
   .bs-num { font-family: var(--mono); text-align: right; }
   .bs-neg { color: #d99079; }
+  /* Year-1 onboarding strip: sticky 3-step guide, shown only on the year-1 board/auction
+     screen (human playtest 9/02: year 1 was the confusing screen, everything after was fine) */
+  .onboard-strip { position: sticky; top: 0; z-index: 500; background: var(--surface2); border: 1px solid var(--border); border-radius: 0 0 6px 6px; padding: 0.6rem 0.9rem 0.5rem; margin-bottom: 1rem; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
+  .onboard-steps { display: flex; flex-wrap: wrap; gap: 0.6rem 1.3rem; }
+  .onboard-step { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--dim); font-family: var(--mono); }
+  .onboard-step .ob-check { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border); font-size: 0.68rem; flex-shrink: 0; }
+  .onboard-step.done { color: var(--sage); }
+  .onboard-step.done .ob-check { border-color: var(--sage); background: var(--sage); color: #12160a; }
+  .onboard-note { font-size: 0.76rem; color: var(--muted); margin-top: 0.4rem; }
+  @keyframes obPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(189,119,51,0.55); } 50% { box-shadow: 0 0 0 7px rgba(189,119,51,0); } }
+  #btnLockYear.pulse { animation: obPulse 1.8s ease-in-out infinite; }
 </style>
 </head>
 <body>
@@ -185,6 +196,16 @@
     </div>
   </section>
 
+  <!-- Year-1 onboarding strip: sticky guide for the confusing first year, hidden after -->
+  <div id="onboardStrip" class="onboard-strip" style="display:none">
+    <div class="onboard-steps">
+      <div class="onboard-step" id="obStep1"><span class="ob-check" data-n="1">1</span> Read your mandate</div>
+      <div class="onboard-step" id="obStep2"><span class="ob-check" data-n="2">2</span> Pick herd and hire hands</div>
+      <div class="onboard-step" id="obStep3"><span class="ob-check" data-n="3">3</span> Bid on bulls and Lock In Year</div>
+    </div>
+    <div class="onboard-note">Your secret objective is in the board meeting box. Everything you do is scored against it.</div>
+  </div>
+
   <!-- Board Meeting: set operations for the year -->
   <section id="secBoard" style="display:none">
     <h2>Board Meeting <span id="boardYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
@@ -212,6 +233,11 @@
           <div class="dec-head">Debt</div>
           <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
           <div class="opt-row" id="optDebt"></div>
+        </div>
+        <div class="dec-block">
+          <div class="dec-head">Hire Hands</div>
+          <div class="dec-sub" id="hireSub">Hands take a year to learn the place. Hired now, useful next year.</div>
+          <div class="opt-row" id="optHire"></div>
         </div>
         <div class="dec-block">
           <div class="dec-head">Technology</div>
@@ -312,7 +338,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=4136592f1c"></script>
+<script src="engine.js?v=eac9f6857c"></script>
 <!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
 <script src="assets/bulls/manifest.js?v=2"></script>
 <script src="county-geo.js?v=b95a77d815"></script>
@@ -450,6 +476,62 @@ function showOnly(ids) {
 let PHASE_SEQ = 0;
 function phaseStale(myPhase, mySeq) { return mySeq !== PHASE_SEQ || PHASE !== myPhase; }
 
+// ---- Year-1 onboarding strip: three steps (read mandate, pick herd/hands, bid + lock in),
+// shown only on the year-1 board/auction screen. Step 1 completes when the mandate panel
+// scrolls into view or after 20s; step 2 on a herd or hire pick; step 3 on any bid entered
+// (the Lock In button pulses until then). setChoice() and updateBidConseq() call onboardStep().
+let onboardState = { mandate: false, decision: false, bid: false };
+let onboardYear = null, onboardTimer = null, onboardObserver = null;
+function onboardActive() { return CUR_YEAR === 1 && (PHASE === 'board' || PHASE === 'auction'); }
+function resetOnboarding() {
+  onboardState = { mandate: false, decision: false, bid: false };
+  if (onboardTimer) { clearTimeout(onboardTimer); onboardTimer = null; }
+  if (onboardObserver) { onboardObserver.disconnect(); onboardObserver = null; }
+}
+function onboardStep(key) {
+  if (!onboardActive() || onboardState[key]) return;
+  onboardState[key] = true;
+  renderOnboarding();
+  if (key === 'mandate') {
+    if (onboardObserver) { onboardObserver.disconnect(); onboardObserver = null; }
+    if (onboardTimer) { clearTimeout(onboardTimer); onboardTimer = null; }
+  }
+}
+function renderOnboarding() {
+  const strip = document.getElementById('onboardStrip');
+  if (!strip) return;
+  [['obStep1', 'mandate'], ['obStep2', 'decision'], ['obStep3', 'bid']].forEach(([id, key]) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const done = !!onboardState[key];
+    el.classList.toggle('done', done);
+    const chk = el.querySelector('.ob-check');
+    if (chk) chk.textContent = done ? '✓' : chk.getAttribute('data-n');
+  });
+  const btn = document.getElementById('btnLockYear');
+  if (btn) btn.classList.toggle('pulse', !onboardState.bid);
+}
+function setupOnboarding() {
+  const strip = document.getElementById('onboardStrip');
+  if (!onboardActive()) {
+    if (strip) strip.style.display = 'none';
+    resetOnboarding();
+    onboardYear = null;
+    return;
+  }
+  if (onboardYear !== CUR_YEAR) { onboardYear = CUR_YEAR; resetOnboarding(); }
+  if (strip) strip.style.display = '';
+  renderOnboarding();
+  if (!onboardState.mandate && !onboardTimer) onboardTimer = setTimeout(() => onboardStep('mandate'), 20000);
+  const mandateEl = document.getElementById('boardMandate');
+  if (mandateEl && !onboardState.mandate && !onboardObserver) {
+    onboardObserver = new IntersectionObserver(entries => {
+      entries.forEach(en => { if (en.isIntersecting) onboardStep('mandate'); });
+    }, { threshold: 0.4 });
+    onboardObserver.observe(mandateEl);
+  }
+}
+
 async function handlePhaseChange(game) {
   // ignore a stale event (poll firing an older phase than the one we already moved to)
   if (game.phase === PHASE && game.year === CUR_YEAR && game.phase !== 'lobby') return;
@@ -489,6 +571,7 @@ async function handlePhaseChange(game) {
     await refreshStandings();
     setPhaseChip('ended');
   }
+  setupOnboarding();
 }
 
 // ---- Market ----
@@ -650,7 +733,7 @@ const ST_PATHS = {
 };
 const ST_LBL = { OR: { x: 90, y: 140 }, ID: { x: 210, y: 190 }, MT: { x: 312, y: 88 }, WY: { x: 358, y: 192 }, CO: { x: 374, y: 298 }, NV: { x: 96, y: 292 }, UT: { x: 212, y: 336 } };
 
-let boardChoice = { herd: 'hold', cull: 'normal', cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: false };
+let boardChoice = { herd: 'hold', cull: 'normal', cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: false, hire: 0 };
 let boardBaseSt = null, boardWorld = null, boardSemen = [], boardFemales = [];
 
 // the ranch as it WILL be after this year's operations are applied (from the year
@@ -660,6 +743,9 @@ function projectedRanch() {
   const raw = localStorage.getItem(boardKey());
   const r = reviveState(raw ? JSON.parse(raw) : boardBaseSt); // fall back to the loaded base if the snapshot is missing
   if (!r) return null;
+  // O gate: last year's hire becomes effective capacity now (Penrose lag), same as
+  // decideYear's year-open step, mirrored here since the raw snapshot is un-activated.
+  RanchEngine.activateHands(r);
   const n = choiceNumbers();
   applyDecisions(r, boardWorld, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
   applyCowBuy(r, boardWorld); applyCull(r); applySemenSell(r); applyTallow(r);
@@ -744,8 +830,11 @@ async function refreshBoard(world) {
   let baseRaw = localStorage.getItem(boardKey());
   if (!baseRaw) { baseRaw = JSON.stringify(team.state); localStorage.setItem(boardKey(), baseRaw); }
   boardBaseSt = reviveState(JSON.parse(baseRaw));
+  // O gate year-open: last year's hire decision becomes effective hands now, mirroring the
+  // first step of decideYear. Must run before the hire control below is rendered or chosen.
+  RanchEngine.activateHands(boardBaseSt);
   boardWorld = world || RanchEngine.newWorld();
-  boardChoice = { herd: 'hold', cull: 'normal', cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: !!(reviveState(JSON.parse(baseRaw)).tallowContract) };
+  boardChoice = { herd: 'hold', cull: 'normal', cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: !!(reviveState(JSON.parse(baseRaw)).tallowContract), hire: 0 };
   boardSemen = (boardWorld && boardWorld.semenCatalog) || [];
   boardFemales = RanchEngine.makeFemaleBoard(boardWorld);
   const st = boardBaseSt, w = boardWorld, reg = RanchEngine.REGIONS[st.region];
@@ -795,6 +884,11 @@ async function refreshBoard(world) {
     { key: 'cash', name: 'Cash', color: 'var(--sky)', pct: RanchEngine.clamp(st.cash / stake, 0.02, 1),
       val: '$' + (st.cash / 1e6).toFixed(2) + 'M' },
   ];
+  // O gate: hands owned vs required, and how much of the herd's genetics are actually
+  // being exploited (Penrose effect). handsReq/util read off the ACTIVATED hands (this
+  // function runs after activateHands, so this is this year's real capacity).
+  const handsReq = RanchEngine.handsRequired(st, w);
+  const util = RanchEngine.utilization(st, w);
   // one hue per metric ($Beef gold, Herd olive, Cash denim); the metrics your objective is
   // scored on carry a star and a full-strength bar, the rest are dimmed so the eye reads
   // "these are the ones that count for me" at a glance
@@ -804,11 +898,38 @@ async function refreshBoard(world) {
       `${pri ? ` <span title="scored in your objective" style="color:${b.color}">★</span>` : ''}</span>` +
       `<span class="kpi-track"><span class="kpi-fill" style="width:${Math.round(b.pct * 100)}%;background:${b.color};opacity:${pri ? 1 : 0.5}"></span></span>` +
       `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`;
-  }).join('');
+  }).join('') +
+    `<div class="kpi-row"><span class="kpi-name">Hands</span>` +
+    `<span class="kpi-track"><span class="kpi-fill" style="width:${Math.round(RanchEngine.clamp(util, 0.02, 1) * 100)}%;background:var(--rust);opacity:0.8"></span></span>` +
+    `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${st.hands.toFixed(1)} of ${handsReq.toFixed(1)} needed</span></div>` +
+    `<div class="kpi-row"><span class="kpi-name">Exploited</span>` +
+    `<span class="kpi-track"><span class="kpi-fill" style="width:${Math.round(util * 100)}%;background:var(--rust);opacity:0.8"></span></span>` +
+    `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${Math.round(util * 100)}%</span></div>` +
+    (util < 1 ? `<div style="font-size:0.76rem;color:#d99079;margin-top:0.2rem">${(st.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length} bulls owned, only ${Math.round(util * 100)}% exploited. Understaffed: hire hands below.</div>` : '');
 
-  renderHerdOptions(); renderDebtOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
+  renderHerdOptions(); renderDebtOptions(); renderHireOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
   refreshDeals();
+}
+
+// ---- Hire hands: the ONE labor decision (0/+1/+2), capped by region scarcity. Effective
+// NEXT year (activateHands lag), so this year's hands/utilization line never moves from it. ----
+function renderHireOptions() {
+  const st = boardBaseSt, w = boardWorld;
+  const cap = RanchEngine.hireCap(st);
+  const wage = RanchEngine.hireCost(st, w);
+  document.getElementById('hireSub').textContent =
+    'Hands take a year to learn the place. Hired now, useful next year. Payroll $' + wage.toLocaleString() + ' per hand per year.';
+  const opt = (n) => {
+    const over = n > cap;
+    const title = n === 0 ? 'Hold' : '+' + n + ' hand' + (n > 1 ? 's' : '');
+    const desc = over
+      ? 'Above your region\'s hiring cap this year (' + cap + ' max).'
+      : n === 0 ? 'No new hires this year.' : '+$' + (n * wage).toLocaleString() + '/yr payroll starting next year.';
+    if (over) return `<button type="button" class="opt" disabled style="opacity:0.4;cursor:default"><div class="opt-t">${title}</div><div class="opt-d">${desc}</div></button>`;
+    return optCard('hire', String(n), title, desc, boardChoice.hire === n);
+  };
+  document.getElementById('optHire').innerHTML = opt(0) + opt(1) + opt(2);
 }
 
 // ---- Rendering / tallow: opt-in byproduct income off cull cows (counter-cyclical) ----
@@ -1063,6 +1184,11 @@ let dealTeams = [], myDeals = [];
 const DEAL_TYPE_LABEL = { bull_trade: 'Sell a bull', semen_split: 'Split an AI straw', infra_coop: 'Co-fund a project', complementor: 'Embryo / flush share' };
 async function refreshDeals() {
   if (!GAME_ID || !TEAM_ID) return;
+  if (CUR_YEAR < RanchEngine.UNLOCKS.deals) {
+    const el = document.getElementById('dealsPanel');
+    if (el) el.innerHTML = lockedNote('Deals open in year ' + RanchEngine.UNLOCKS.deals + '.');
+    return;
+  }
   const [{ data: teams }, { data: deals }] = await Promise.all([
     supa.from('teams').select('id,name,state').eq('game_id', GAME_ID),
     supa.from('deals').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR).in('status', ['proposed', 'accepted']),
@@ -1330,6 +1456,7 @@ function renderTechOptions() {
 }
 
 function setChoice(group, mode) {
+  if (group === 'herd' || group === 'hire') onboardStep('decision');
   if (group === 'tech') {
     const i = boardChoice.techs.indexOf(mode);
     if (i >= 0) boardChoice.techs.splice(i, 1); else boardChoice.techs.push(mode);
@@ -1340,6 +1467,7 @@ function setChoice(group, mode) {
     renderSemenOffers();
   }
   else if (group === 'debt' && mode === 'nolev') { /* not selectable */ }
+  else if (group === 'hire') { boardChoice.hire = Number(mode) || 0; renderHireOptions(); }
   else { boardChoice[group] = mode; if (group === 'herd') renderHerdOptions(); else if (group === 'cull') renderCullOptions(); else renderDebtOptions(); }
   updateConsequence();
 }
@@ -1386,6 +1514,10 @@ async function submitPlay() {
     const r = reviveState(raw ? JSON.parse(raw) : boardBaseSt);
     if (!r) { msg('Page not ready, reopen it.', 'err'); return; }
     const w = boardWorld;
+    // O gate: activate last year's hire before applying this year's decisions, then set
+    // this year's hire (effective next year), mirroring decideYear's year-open + hire policy.
+    RanchEngine.activateHands(r);
+    RanchEngine.setHire(r, boardChoice.hire || 0);
     const n = choiceNumbers();
     applyDecisions(r, w, n.expandCows, n.debtAction, n.techChoices, n.semenChoice);
     applyCowBuy(r, w); applyCull(r); applySemenSell(r); applyTallow(r);
@@ -1442,6 +1574,7 @@ function updateBidConseq(bullId) {
   const el = document.getElementById('conseq_' + bullId);
   if (!el) return;
   const v = Number((document.getElementById('bid_' + bullId) || {}).value);
+  if (v > 0) onboardStep('bid');
   if (!v) { el.textContent = ''; return; }
   const left = AUCTION_CASH - v;
   const others = Math.max(0, AUCTION_LOTS - 1);
@@ -1548,9 +1681,12 @@ function renderHerdPanel(st) {
 
 function renderBullCards(bulls, world, st, bidMap) {
   const container = document.getElementById('bullCards');
-  // preserve anything the user is mid-typing so the poll-driven re-render does not wipe it
+  // preserve anything the user is mid-typing (value AND caret) so the poll-driven
+  // re-render does not wipe it or jump the cursor to the end mid-edit
   const active = document.activeElement;
   const activeId = active && active.id && active.id.indexOf('bid_') === 0 ? active.id : null;
+  const activeSelStart = activeId && active.selectionStart != null ? active.selectionStart : null;
+  const activeSelEnd = activeId && active.selectionEnd != null ? active.selectionEnd : null;
   const typed = {};
   container.querySelectorAll('input').forEach(i => { if (i.value !== '') typed[i.id] = i.value; });
   container.innerHTML = '';
@@ -1606,7 +1742,14 @@ function renderBullCards(bulls, world, st, bidMap) {
     container.appendChild(div);
   });
   // restore focus and caret so typing is never interrupted by a background refresh
-  if (activeId) { const el = document.getElementById(activeId); if (el) { el.focus(); const v = el.value; el.value = ''; el.value = v; } }
+  if (activeId) {
+    const el = document.getElementById(activeId);
+    if (el) {
+      el.focus();
+      try { el.setSelectionRange(activeSelStart != null ? activeSelStart : el.value.length, activeSelEnd != null ? activeSelEnd : el.value.length); }
+      catch (e) { /* some input types reject setSelectionRange; focus alone is fine */ }
+    }
+  }
   // re-render wiped the consequence lines; rebuild them for every filled bid box
   bulls.forEach(b => { const i = document.getElementById('bid_' + b.id); if (i && i.value) updateBidConseq(b.id); });
 }
@@ -1683,7 +1826,17 @@ async function showResults(world) {
   const won = (bulls || []).filter(b => b.winner_team === TEAM_ID);
   const spent = won.reduce((s, b) => s + Number(b.price || 0), 0);
 
-  let html = `<div style="font-family:var(--serif);font-size:1.2rem;margin-bottom:0.6rem;color:var(--accent)">` +
+  // clock auto-lock: admin flags a team's board_submitted decision auto_locked when the
+  // year clock expires before that team locked in on its own. Show it so the team knows
+  // its plan for the year was the engine defaults (hold, no bids, no deals, hire 0).
+  const { data: myDecs } = await supa.from('decisions').select('payload')
+    .eq('game_id', GAME_ID).eq('team_id', TEAM_ID).eq('year', CUR_YEAR).eq('kind', 'board_submitted');
+  const wasAutoLocked = (myDecs || []).some(d => d.payload && d.payload.auto_locked);
+  let html = wasAutoLocked
+    ? `<div style="background:#351d18;color:#d99079;border:1px solid #5a3128;border-radius:5px;padding:0.6rem 0.85rem;margin-bottom:0.8rem;font-size:0.86rem">` +
+      `Time ran out; your defaults were used.</div>`
+    : '';
+  html += `<div style="font-family:var(--serif);font-size:1.2rem;margin-bottom:0.6rem;color:var(--accent)">` +
     (won.length ? `You won ${won.length} bull${won.length > 1 ? 's' : ''} for $${Math.round(spent).toLocaleString()}.` : `You won no bulls this year.`) +
     `</div>`;
 
@@ -1832,9 +1985,15 @@ function booksCard(st, w) {
       row('Overhead', -s.overhead) +
       row('Herd-bull replacement', -s.bullCost) +
       (s.breeding > 0 ? row('Bull development', -s.breeding) : '') +
+      (s.payroll > 0 ? row('Payroll (' + s.hands + ' hands)', -s.payroll) : '') +
       (s.interest > 0 ? row(g('interest', 'Interest on debt'), -s.interest) : '') +
       row('Net for the year', s.net, { rule: true, strong: true }) +
-      `</table></div>`;
+      `</table>` +
+      (s.hands != null ? `<div style="font-size:0.72rem;margin-top:0.35rem;color:${s.utilPenalty > 0 ? '#d99079' : 'var(--muted)'}">` +
+        `${s.hands} hands managing ${s.activeBulls} active bull${s.activeBulls === 1 ? '' : 's'}, ${Math.round((s.utilization || 0) * 100)}% exploited` +
+        (s.utilPenalty > 0 ? `. Understaffing cost ~${money(s.utilPenalty)} of genetics this year.` : '.') +
+        `</div>` : '') +
+      `</div>`;
   }
   const bs = `<div style="flex:1;min-width:210px">` +
     `<div style="font-family:var(--mono);font-size:0.68rem;color:var(--accent);letter-spacing:0.08em;margin-bottom:0.3rem">BALANCE SHEET</div>` +

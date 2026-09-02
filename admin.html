@@ -55,6 +55,12 @@
   .lb-bar { display: inline-block; height: 8px; background: var(--rust); border-radius: 4px; min-width: 2px; }
   .metric-btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; }
   .metric-btn.active { background: var(--sky); }
+  .tag-autolock { background: #fde8e8; color: #c81e1e; }
+  .clock-box { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.8rem; }
+  .clock-display { font-family: monospace; font-size: 2.4rem; font-weight: bold; color: var(--dusk); letter-spacing: 0.05em; min-width: 4ch; }
+  .clock-display.clock-warn { color: var(--rust); }
+  .clock-display.clock-expired { color: #c81e1e; }
+  input[type=number].minutes-input { width: 5rem; padding: 0.35rem 0.5rem; font-family: inherit; font-size: 0.9rem; border: 1px solid var(--border); border-radius: 4px; }
 </style>
 </head>
 <body>
@@ -109,7 +115,12 @@
         <tbody id="tbodyRanches"></tbody>
       </table>
       <div class="row" style="margin-top:1rem">
+        <button id="btnAssignRanches" onclick="assignRanches()" class="secondary">Assign Ranches (skip market)</button>
+        <span class="status">Round-robin assigns every joined team a ranch and opens Year 1 immediately. Manual market above stays the default.</span>
+      </div>
+      <div class="row" style="margin-top:0.4rem">
         <button id="btnOpenAuction" onclick="openYear()" disabled>Open Year 1 (Board Meeting)</button>
+        <button id="btnForceOpenMarket" onclick="openYear()" class="secondary">Force open year</button>
         <span class="status" id="marketStatus">Waiting for all teams to buy a ranch.</span>
       </div>
     </div>
@@ -123,6 +134,15 @@
         Teams set operations (expand/destock, debt, technology, semen) and place sealed bids on
         one page, then lock in. AI ranches have already decided. Resolve the year when teams are ready.
       </p>
+      <div class="clock-box">
+        <div>
+          <div class="status" style="margin-bottom:0.2rem">Minutes per year (blank = no clock)</div>
+          <input type="number" id="clockMinutes" class="minutes-input" min="0" step="0.1" placeholder="off">
+          <button id="btnStartClock" onclick="startClock()" class="secondary" style="margin-left:0.4rem">Start clock</button>
+          <button id="btnStopClock" onclick="stopClock()" class="secondary" style="margin-left:0.2rem;display:none">Stop clock</button>
+        </div>
+        <div id="clockDisplay" class="clock-display" style="display:none">--:--</div>
+      </div>
       <div id="boardReadySummary" class="ready-summary">Teams ready: 0 / 0</div>
       <table id="tblBoard">
         <thead><tr><th>Team</th><th>Type</th><th>Locked in</th></tr></thead>
@@ -171,7 +191,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=4136592f1c"></script>
+<script src="engine.js?v=eac9f6857c"></script>
 <script>
 'use strict';
 
@@ -183,6 +203,14 @@ let TEAMS     = [];   // {id, name, archetype, is_ai, state}
 let BULLS     = [];   // current year bulls
 let CUR_YEAR  = 0;
 let lb_metric = 'cash';
+let openingYear = false; // guards Open Year / Force Open / Assign Ranches against double-invocation
+let ranchesReqSeq = 0;   // monotonic counter so a stale in-flight refreshRanches() cannot
+                          // clobber a newer one and freeze the Open Year gate (6a fix)
+
+// ---- Year clock (projector countdown + auto-lock at zero) ----
+let clockTimer = null;
+let clockEndsAt = null;   // epoch ms
+let clockExpiredHandled = false;
 
 // Polling fallback interval (ms) for realtime events
 const POLL_MS = 4000;
@@ -415,6 +443,62 @@ function setReplacer(key, value) {
   return value;
 }
 
+// ---- Assign ranches: round-robin every joined team a listing and skip the market phase.
+// Manual market (buy-your-own) stays the default path; this is the fast-start alternative.
+// Reuses the same BUY_POLICY scoring aiMarketPurchases() uses so each team lands on a
+// listing that fits its archetype, not a random one.
+async function assignRanches() {
+  if (openingYear) return;
+  document.getElementById('btnAssignRanches').disabled = true;
+  document.getElementById('btnOpenAuction').disabled = true;
+  document.getElementById('btnForceOpenMarket').disabled = true;
+  try {
+    const [{ data: ranches }, { data: teams }] = await Promise.all([
+      supa.from('ranches').select('*').eq('game_id', GAME_ID).is('bought_by', null),
+      supa.from('teams').select('*').eq('game_id', GAME_ID),
+    ]);
+    TEAMS = teams || [];
+    if (!TEAMS.length) { msg('No teams have joined yet.', 'err'); document.getElementById('btnAssignRanches').disabled = false; return; }
+    const remaining = [...(ranches || [])];
+    if (!remaining.length) { msg('No unclaimed ranch listings to assign.', 'err'); document.getElementById('btnAssignRanches').disabled = false; return; }
+    const medianAsk = RanchEngine.median(remaining.map(l => l.ask));
+
+    // shuffle so no archetype always gets first pick of the best-scoring listing
+    const order = [...TEAMS].sort(() => Math.random() - 0.5);
+    const w0 = RanchEngine.newWorld();
+    for (const team of order) {
+      if (!remaining.length) break;
+      const policy = RanchEngine.BUY_POLICY[team.archetype];
+      let chosen, chosenI = 0;
+      if (policy) {
+        let bestI = 0, bestS = -Infinity;
+        remaining.forEach((l, i) => {
+          const reg = RanchEngine.REGIONS[l.region];
+          const s = policy(l, { left: RanchEngine.START_CASH - l.ask, reg, medianAsk });
+          if (s > bestS) { bestS = s; bestI = i; }
+        });
+        chosenI = bestI;
+      }
+      chosen = remaining.splice(chosenI, 1)[0];
+
+      const ranchState = RanchEngine.makeRanch(team.archetype, { ...chosen, landCap: chosen.land_cap });
+      ranchState.cash0 = ranchState.cash;
+      ranchState.eq0 = RanchEngine.equity(ranchState, w0);
+      ranchState.peakEquity = ranchState.eq0 - ranchState.cash0;
+
+      await supa.from('ranches').update({ bought_by: team.id }).eq('id', chosen.id);
+      await supa.from('teams').update({ state: JSON.parse(JSON.stringify(ranchState, setReplacer)) }).eq('id', team.id);
+      await logDecision(team.id, 'ranch_purchase', { ranch_id: chosen.id, county: chosen.county, ask: chosen.ask, assigned: true });
+    }
+
+    await refreshRanches();
+    msg('Ranches assigned to all ' + order.length + ' teams. Opening Year 1.', 'ok');
+    await openYear();
+  } finally {
+    document.getElementById('btnAssignRanches').disabled = false;
+  }
+}
+
 // ---- Ranch market ----
 function subscribeToRanches() {
   supa.channel('ranches-' + GAME_ID)
@@ -424,10 +508,16 @@ function subscribeToRanches() {
 
 async function refreshRanches() {
   if (!GAME_ID) return;
+  // 6a fix: overlapping calls (realtime event + the 4s poll firing close together) used to
+  // race, and whichever Promise.all resolved LAST won even if it started FIRST with stale
+  // data -- that could redraw the gate as "not ready" after it had already gone ready, and
+  // nothing then retriggered a refresh, so the Open Year button stayed disabled forever.
+  const mySeq = ++ranchesReqSeq;
   const [{ data: ranches }, { data: teams }] = await Promise.all([
     supa.from('ranches').select('*').eq('game_id', GAME_ID),
     supa.from('teams').select('*').eq('game_id', GAME_ID),
   ]);
+  if (mySeq !== ranchesReqSeq) return; // a newer refreshRanches() already landed; drop this one
   TEAMS = teams || [];
   const total = (ranches || []).length;
   renderRanches(ranches || [], teams || []);
@@ -463,7 +553,12 @@ function renderRanches(ranches, teams) {
 // Bulls are generated NOW (not in a separate auction step) so the team sees operations
 // and the sale on one screen and locks both in together. Admin then resolves the year.
 async function openYear() {
+  if (openingYear) return; // guards against Open Year / Force Open / Assign Ranches double-fire
+  openingYear = true;
+  stopClock(true); // a fresh year gets a fresh clock; clear any leftover countdown from the last one
   document.getElementById('btnOpenAuction').disabled = true;
+  document.getElementById('btnForceOpenMarket').disabled = true;
+  document.getElementById('btnAssignRanches').disabled = true;
   CUR_YEAR++;
 
   const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
@@ -498,13 +593,15 @@ async function openYear() {
   startPolling();
   refreshBoard();
   refreshAuction();
+  document.getElementById('btnAssignRanches').disabled = false;
+  openingYear = false;
 }
 
 // Generate and insert this year's bull lots (real Red Bluff names, no dup within a sale).
 async function generateBulls(world) {
   const bullRows = [];
   const usedNames = new Set();
-  for (let i = 0; i < RanchEngine.BULLS_PER_YEAR; i++) {
+  for (let i = 0; i < (RanchEngine.bullsForYear ? RanchEngine.bullsForYear(world.year || CUR_YEAR) : RanchEngine.BULLS_PER_YEAR); i++) {
     let b = RanchEngine.makeBull(world);
     for (let tries = 0; b.name && usedNames.has(b.name) && tries < 25; tries++) b = RanchEngine.makeBull(world);
     if (b.name) usedNames.add(b.name);
@@ -536,17 +633,20 @@ async function applyAiDecisions(world) {
 async function refreshBoard() {
   const [{ data: teams }, { data: decs }] = await Promise.all([
     supa.from('teams').select('*').eq('game_id', GAME_ID),
-    supa.from('decisions').select('team_id').eq('game_id', GAME_ID).eq('year', CUR_YEAR).eq('kind', 'board_submitted'),
+    supa.from('decisions').select('team_id, payload').eq('game_id', GAME_ID).eq('year', CUR_YEAR).eq('kind', 'board_submitted'),
   ]);
   TEAMS = teams || [];
-  const submitted = new Set((decs || []).map(d => d.team_id));
+  const submitted = new Map((decs || []).map(d => [d.team_id, d.payload || {}]));
   const tbody = document.getElementById('tbodyBoard');
   tbody.innerHTML = '';
   const humans = TEAMS.filter(t => !t.is_ai);
   TEAMS.forEach(t => {
+    const dec = submitted.get(t.id);
     const badge = t.is_ai
       ? '<span class="tag tag-ai">AI decided</span>'
-      : (submitted.has(t.id) ? '<span class="tag tag-ready">READY</span>' : '<span class="tag tag-waiting">WAITING</span>');
+      : (dec
+          ? (dec.auto_locked ? '<span class="tag tag-autolock">AUTO-LOCKED</span>' : '<span class="tag tag-ready">READY</span>')
+          : '<span class="tag tag-waiting">WAITING</span>');
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${esc(t.name)}</td><td>${t.is_ai ? 'AI' : 'Human'}</td><td>${badge}</td>`;
     tbody.appendChild(tr);
@@ -561,6 +661,97 @@ async function refreshBoard() {
     ? 'All teams ready (' + readyCount + ' / ' + humans.length + ')'
     : 'Teams ready: ' + readyCount + ' / ' + humans.length;
   summaryEl.classList.toggle('all-ready', waiting === 0 && humans.length > 0);
+}
+
+// ---- Year clock: admin sets minutes per year, a projector countdown runs, and at zero
+// every team that has not locked in gets engine defaults (Hold operations, no new bids,
+// no deals) written as its decision and is flagged auto-locked. Admin still clicks Resolve.
+function startClock() {
+  const mins = Number(document.getElementById('clockMinutes').value);
+  if (!mins || mins <= 0) { msg('Enter minutes per year (a number greater than 0) to start the clock.', 'err'); return; }
+  clockEndsAt = Date.now() + mins * 60000;
+  clockExpiredHandled = false;
+  document.getElementById('btnStartClock').textContent = 'Restart clock';
+  document.getElementById('btnStopClock').style.display = '';
+  document.getElementById('clockDisplay').style.display = '';
+  if (clockTimer) clearInterval(clockTimer);
+  clockTimer = setInterval(tickClock, 250);
+  tickClock();
+}
+
+function stopClock(silent) {
+  if (clockTimer) { clearInterval(clockTimer); clockTimer = null; }
+  clockEndsAt = null;
+  clockExpiredHandled = false;
+  const disp = document.getElementById('clockDisplay');
+  if (disp) { disp.style.display = 'none'; disp.classList.remove('clock-warn', 'clock-expired'); }
+  const stopBtn = document.getElementById('btnStopClock');
+  if (stopBtn) stopBtn.style.display = 'none';
+  const startBtn = document.getElementById('btnStartClock');
+  if (startBtn) startBtn.textContent = 'Start clock';
+  if (!silent) msg('Clock stopped.', 'ok');
+}
+
+function tickClock() {
+  if (!clockEndsAt) return;
+  const disp = document.getElementById('clockDisplay');
+  if (!disp) return;
+  const msLeft = clockEndsAt - Date.now();
+  if (msLeft <= 0) {
+    disp.textContent = '0:00';
+    disp.classList.add('clock-expired');
+    disp.classList.remove('clock-warn');
+    if (!clockExpiredHandled) {
+      clockExpiredHandled = true;
+      autoLockExpiredTeams();
+    }
+    return;
+  }
+  const totalSec = Math.ceil(msLeft / 1000);
+  const m = Math.floor(totalSec / 60), s = totalSec % 60;
+  disp.textContent = m + ':' + String(s).padStart(2, '0');
+  disp.classList.toggle('clock-warn', msLeft <= 30000);
+}
+
+// At clock expiry: any human team without a board_submitted decision this year gets the
+// engine defaults written as its decision (Hold operations -- the team's saved state
+// already reflects "do nothing" since it was never touched -- no bids, no deals, hire 0),
+// flagged auto_locked so the admin list shows it. Resolve is still a manual admin click.
+async function autoLockExpiredTeams() {
+  if (!GAME_ID) return;
+  const [{ data: teams }, { data: decs }] = await Promise.all([
+    supa.from('teams').select('id, is_ai').eq('game_id', GAME_ID),
+    supa.from('decisions').select('team_id').eq('game_id', GAME_ID).eq('year', CUR_YEAR).eq('kind', 'board_submitted'),
+  ]);
+  const submitted = new Set((decs || []).map(d => d.team_id));
+  const toLock = (teams || []).filter(t => !t.is_ai && !submitted.has(t.id));
+  for (const t of toLock) {
+    // Hold operations (state is left untouched) and explicitly hire 0 when the engine
+    // exports a hire control, so an auto-locked team never carries over a stale pending
+    // hire from before it stopped paying attention.
+    if (typeof RanchEngine.setHire === 'function') {
+      const { data: row } = await supa.from('teams').select('state').eq('id', t.id).single();
+      if (row && row.state) {
+        const st = reviveState(row.state);
+        RanchEngine.setHire(st, 0);
+        await supa.from('teams').update({ state: JSON.parse(JSON.stringify(st, setReplacer)) }).eq('id', t.id);
+      }
+    }
+    await logDecisionForYear(t.id, 'board_submitted', {
+      auto_locked: true, hire: 0,
+      note: 'Auto-locked at clock expiry: held operations, no new bids, no deals proposed, hire 0.',
+    });
+  }
+  await refreshBoard();
+  msg(toLock.length
+    ? toLock.length + ' team' + (toLock.length === 1 ? '' : 's') + ' auto-locked at the clock. Resolve when ready.'
+    : 'Clock expired. All teams had already locked in.', 'ok');
+}
+
+// same as logDecision() but does not depend on the module-level CUR_YEAR staying in sync
+// (it always is here, but this keeps the clock path explicit about which year it locks)
+async function logDecisionForYear(teamId, kind, payload) {
+  await supa.from('decisions').insert({ game_id: GAME_ID, team_id: teamId, year: CUR_YEAR, kind, payload });
 }
 
 // ---- Auction monitor ----
@@ -656,6 +847,7 @@ function renderAuction(bulls, bidCount, humanCount, teamMap) {
 // ---- Resolve auction ----
 async function resolveAuction() {
   document.getElementById('btnResolve').disabled = true;
+  stopClock(true); // the year is being resolved, the clock for it no longer applies
   const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
   const world = gRow.world;
 
