@@ -199,11 +199,11 @@
   <!-- Year-1 onboarding strip: sticky guide for the confusing first year, hidden after -->
   <div id="onboardStrip" class="onboard-strip" style="display:none">
     <div class="onboard-steps">
-      <div class="onboard-step" id="obStep1"><span class="ob-check" data-n="1">1</span> Read your mandate</div>
+      <div class="onboard-step" id="obStep1"><span class="ob-check" data-n="1">1</span> Find your secret objective (the box under the map). It is what you are graded on.</div>
       <div class="onboard-step" id="obStep2"><span class="ob-check" data-n="2">2</span> Pick herd and hire hands</div>
       <div class="onboard-step" id="obStep3"><span class="ob-check" data-n="3">3</span> Bid on bulls and Lock In Year</div>
     </div>
-    <div class="onboard-note">Your secret objective is in the board meeting box. Everything you do is scored against it.</div>
+    <div class="onboard-note">Other tables have different objectives, so the same bull is worth different money to each of them. Keep yours to yourself.</div>
   </div>
 
   <!-- Board Meeting: set operations for the year -->
@@ -280,9 +280,10 @@
     <h2>Ranch Market</h2>
     <div class="card">
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.8rem">
-        Pick a ranch and the strategy you will run it under. Each ranch shows the strategy
-        it is run under today; keep it or choose your own. Your strategy is your scorecard
-        and it locks in when you buy.
+        Pick a ranch. Each ranch comes with the strategy it is run under today, and buying it
+        makes that strategy your scorecard for the whole game. Cash left is what you have to
+        run the place and buy bulls. The country matters as much as the ranch: click a row to
+        see what its region pays for, what it costs, and how dry it runs.
       </p>
       <div class="mini-map" id="marketMap" style="margin-bottom:0.9rem"></div>
       <div style="overflow-x:auto">
@@ -632,6 +633,40 @@ function houseStrategy(r) {
 }
 
 let marketRanches = [];
+// ---- What the country means (Steven 9/07: "do they ever understand the region difference?") ----
+const TRAIT_WORDS = { ce: 'calving ease', growth: 'growth', marb: 'marbling', forage: 'forage efficiency', milk: 'milk' };
+const TECH_WORDS = { water: 'water infrastructure', vfence: 'virtual fence', dogs: 'stock dogs', drone: 'drones', genomic: 'genomic testing' };
+const KPI_WORDS = { cash: 'equity growth', herdGrowth: 'herd growth', genetics: 'herd genetics', rep: 'reputation',
+                    costEff: 'cost per pound', resilience: 'weathering drought', lowDebt: 'staying out of debt', premium: 'brand premium' };
+function scorecardWords(archKey) {
+  const a = RanchEngine.ARCHETYPES[archKey]; if (!a) return '';
+  return Object.entries(a.kpi).sort((x, y) => y[1] - x[1]).map(([k, w]) => `${KPI_WORDS[k] || k} ${Math.round(w * 100)}%`).join(', ');
+}
+function regionOneLiner(regionKey) {
+  const reg = RanchEngine.REGIONS[regionKey]; if (!reg) return '';
+  return `${esc(reg.name)}<br>calves ${reg.priceMult.toFixed(2)}x &middot; drought ${reg.droughtExposure}x`;
+}
+function regionProfileHtml(r) {
+  const reg = RanchEngine.REGIONS[r.region]; if (!reg) return '';
+  const pays = Object.entries(reg.w).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, v]) => `${TRAIT_WORDS[t]} (${v.toFixed(1)})`).join(' and ');
+  const fits = Object.entries(reg.tech).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([t, v]) => `${TECH_WORDS[t]} (${v.toFixed(1)})`).join(', ');
+  const cap = r.landCap != null ? r.landCap : r.land_cap;
+  const room = cap ? Math.round((cap / r.herd - 1) * 100) : null;
+  const hireCap = reg.laborScarcity >= 1.7 ? 1 : 2;
+  const handCost = Math.round(RanchEngine.HAND_WAGE * reg.laborScarcity);
+  const dry = reg.droughtExposure >= 1.2 ? 'the driest country in the game' : reg.droughtExposure >= 1.05 ? 'drier than average' : reg.droughtExposure <= 0.9 ? 'the wettest country in the game' : 'average drought exposure';
+  const row = (k, v) => `<tr><td style="color:var(--dim);padding:0.1rem 0.6rem 0.1rem 0;white-space:nowrap">${k}</td><td style="padding:0.1rem 0">${v}</td></tr>`;
+  return `<div style="border:1px solid var(--border);border-radius:5px;padding:0.5rem 0.7rem;margin:0.2rem 0 0.6rem;background:var(--surface)">` +
+    `<div style="font-weight:700;font-size:0.84rem;color:var(--tan);margin-bottom:0.25rem">What ${esc(reg.name)} country means</div>` +
+    `<table style="font-size:0.78rem;border-collapse:collapse">` +
+    row('Calf prices', `<b>${reg.priceMult.toFixed(2)}x</b> the national level (${reg.priceMult >= 1.05 ? 'a premium market' : reg.priceMult <= 0.93 ? 'a discount market' : 'about average'})`) +
+    row('Drought', `<b>${reg.droughtExposure}x</b> exposure, ${dry}. Drought hits feed cost and calf crop, never bull prices.`) +
+    row('Buyers pay for', `<b>${pays}</b>; a bull strong in these traits is worth more here than elsewhere`) +
+    row('Hired hands', `up to <b>${hireCap}</b> a year, about <b>$${handCost.toLocaleString()}</b> each per year (labor is ${reg.laborScarcity >= 1.7 ? 'scarce' : reg.laborScarcity >= 1.3 ? 'tight' : 'easy to find'})`) +
+    row('Technology that fits', fits) +
+    (room != null ? row('Room to grow', `land carries about <b>${room}%</b> more cows than the herd today`) : '') +
+    `</table></div>`;
+}
 function renderMarket(ranches) {
   marketRanches = ranches || [];
   // clickable map of the available counties (Steven: see the map when picking a ranch)
@@ -648,7 +683,7 @@ function renderMarket(ranches) {
     r._house = houseStrategy(r);
     const tr = document.createElement('tr');
     tr.innerHTML =
-      `<td>${esc(r._name)}</td><td>${esc(r.county)}</td>` +
+      `<td>${esc(r._name)}</td><td>${esc(r.county)}<div style="font-size:0.7rem;color:var(--dim)">${regionOneLiner(r.region)}</div></td>` +
       `<td>${r.herd.toLocaleString()} ${g('head', 'hd')}</td>` +
       `<td>$${r.ask.toLocaleString()}</td>` +
       `<td>$${(RanchEngine.START_CASH - r.ask).toLocaleString()}</td>` +
@@ -674,7 +709,8 @@ function openBuyConfirm(ranchId) {
     `<div class="card" style="margin-top:0.8rem;background:var(--surface2)">` +
     `<div style="font-weight:700;font-size:0.95rem;color:var(--tan);margin-bottom:0.3rem">${esc(r._name)}</div>` +
     `<div style="font-size:0.82rem;color:var(--dim);margin-bottom:0.6rem">${esc(r.county)} &middot; ${r.herd.toLocaleString()} ${g('head', 'hd')} &middot; Ask $${r.ask.toLocaleString()} &middot; Cash left $${(RanchEngine.START_CASH - r.ask).toLocaleString()}</div>` +
-    `<div style="margin-bottom:0.3rem">Strategy: <strong style="color:var(--tan)">${esc(stratLabel)}</strong></div>` +
+    regionProfileHtml(r) +
+    `<div style="margin-bottom:0.3rem">Strategy: <strong style="color:var(--tan)">${esc(stratLabel)}</strong> <span style="font-size:0.78rem;color:var(--dim)">(scorecard: ${scorecardWords(r._house)})</span></div>` +
     `<p style="font-size:0.76rem;color:var(--muted);margin:0.1rem 0 0.7rem">This ranch is run as ${esc(stratLabel)}, so that becomes the strategy you are graded on for the game. How you play is your call, but your scorecard is set when you buy.</p>` +
     `<div style="display:flex;gap:0.6rem">` +
     `<button onclick="confirmBuy('${r.id}')">Confirm Buy</button>` +
