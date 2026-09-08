@@ -141,9 +141,9 @@
       </p>
       <div class="clock-box">
         <div>
-          <div class="status" style="margin-bottom:0.2rem">Minutes per year (blank = no clock)</div>
-          <input type="number" id="clockMinutes" class="minutes-input" min="0" step="0.1" placeholder="off">
-          <button id="btnStartClock" onclick="startClock()" class="secondary" style="margin-left:0.4rem">Start clock</button>
+          <div class="status" style="margin-bottom:0.2rem">Minutes this year (defaults: year 1 = 12, then 8; edit to adjust)</div>
+          <input type="number" id="clockMinutes" class="minutes-input" min="0" step="0.5" placeholder="off">
+          <button id="btnStartClock" onclick="startClock()" style="margin-left:0.4rem">Start clock</button>
           <button id="btnStopClock" onclick="stopClock()" class="secondary" style="margin-left:0.2rem;display:none">Stop clock</button>
         </div>
         <div id="clockDisplay" class="clock-display" style="display:none">--:--</div>
@@ -295,6 +295,7 @@ async function resumeGame() {
     document.getElementById('btnResolve').disabled = false;
     document.getElementById('btnNextYear').style.display = 'none';
     document.getElementById('boardYear').textContent = 'Year ' + CUR_YEAR;
+    prefillClock(CUR_YEAR);
     document.getElementById('auctionYear').textContent = 'Year ' + CUR_YEAR;
     subscribeToAuction();
     await refreshBoard();
@@ -611,6 +612,7 @@ async function openYear() {
   document.getElementById('btnNextYear').style.display = 'none';
   document.getElementById('boardYear').textContent = 'Year ' + CUR_YEAR;
   document.getElementById('auctionYear').textContent = 'Year ' + CUR_YEAR;
+  prefillClock(CUR_YEAR);
   msg('Year ' + CUR_YEAR + ' is open. Teams set operations and bids on one page, then you resolve the year.', 'ok');
   subscribeToAuction();
   startPolling();
@@ -692,6 +694,16 @@ async function refreshBoard() {
 // ---- Year clock: admin sets minutes per year, a projector countdown runs, and at zero
 // every team that has not locked in gets engine defaults (Hold operations, no new bids,
 // no deals) written as its decision and is flagged auto-locked. Admin still clicks Resolve.
+// default minutes per year (Steven 9/07): year 1 is the first board (12), later years 8.
+// openYear prefills the box; Start clock is then one click. Edit the box to adjust.
+const CLOCK_DEFAULT_MIN = { 1: 12, other: 8 };
+function clockDefaultFor(year) { return CLOCK_DEFAULT_MIN[year] || CLOCK_DEFAULT_MIN.other; }
+function prefillClock(year) {
+  const el = document.getElementById('clockMinutes');
+  if (el) el.value = clockDefaultFor(year);
+  const btn = document.getElementById('btnStartClock');
+  if (btn) btn.textContent = 'Start clock (' + clockDefaultFor(year) + ' min)';
+}
 function startClock() {
   const mins = Number(document.getElementById('clockMinutes').value);
   if (!mins || mins <= 0) { msg('Enter minutes per year (a number greater than 0) to start the clock.', 'err'); return; }
