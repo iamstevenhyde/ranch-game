@@ -230,6 +230,11 @@
           <div class="opt-row" id="optHerd"></div>
         </div>
         <div class="dec-block">
+          <div class="dec-head">Cull for</div>
+          <div class="dec-sub">The bottom of the herd leaves every year. What you cull for decides what the herd gets better at. One reason a year; the gains stay.</div>
+          <div class="opt-row" id="optCull"></div>
+        </div>
+        <div class="dec-block">
           <div class="dec-head">Debt</div>
           <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
           <div class="opt-row" id="optDebt"></div>
@@ -323,6 +328,12 @@
     <div class="card" id="cardWon">Waiting for resolution.</div>
   </section>
 
+  <!-- Busted: the bank foreclosed; the team is out but keeps watching the standings -->
+  <section id="secBusted" style="display:none">
+    <h2>Busted</h2>
+    <div class="card" id="cardBusted">The bank foreclosed.</div>
+  </section>
+
   <!-- Standings -->
   <section id="secStandings" style="display:none">
     <h2>Standings</h2>
@@ -338,7 +349,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=eac9f6857c"></script>
+<script src="engine.js?v=1701580de8"></script>
+<script src="recap.js?v=67b2825eaf"></script>
 <!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
 <script src="assets/bulls/manifest.js?v=2"></script>
 <script src="county-geo.js?v=b95a77d815"></script>
@@ -427,11 +439,17 @@ async function joinGame() {
 
   GAME_ID = game.id;
 
-  // Pick a random available (non-probe) archetype not yet claimed
+  // Pick a random (non-probe) archetype among the LEAST-claimed ones. Round one hands
+  // out the six mandates unclaimed; once all six are taken (class of 30 = 8 tables,
+  // Steven 9/07) teams 7+ repeat a mandate, drawn from whichever are used least. The
+  // #mandateRare R line tells a team how many rivals share its objective, so repeats
+  // are honest, and a same-second join race can at worst make one extra repeat.
   const { data: existingTeams } = await supa.from('teams').select('archetype').eq('game_id', GAME_ID);
-  const usedArch = (existingTeams || []).map(t => t.archetype);
-  const available = Object.keys(RanchEngine.ARCHETYPES).filter(k =>
-    !RanchEngine.ARCHETYPES[k].probe && !usedArch.includes(k));
+  const counts = {};
+  Object.keys(RanchEngine.ARCHETYPES).forEach(k => { if (!RanchEngine.ARCHETYPES[k].probe) counts[k] = 0; });
+  (existingTeams || []).forEach(t => { if (t.archetype in counts) counts[t.archetype]++; });
+  const minUse = Math.min(...Object.values(counts));
+  const available = Object.keys(counts).filter(k => counts[k] === minUse);
   if (!available.length) { msg('No archetype slots remaining in this game.', 'err'); return; }
   ARCHETYPE = available[Math.floor(Math.random() * available.length)];
 
@@ -466,7 +484,10 @@ function subscribeToGame() {
 // ALL of these and then shows only the ones the current phase owns. This kills the old
 // bug where realtime + the 4s poll both fired and sections accumulated (board buried
 // under last year's results, the board appearing "skipped").
-const ALL_SECTIONS = ['secLobbyWait', 'secMarket', 'secStats', 'secBoard', 'secAuction', 'secWon', 'secStandings'];
+const ALL_SECTIONS = ['secLobbyWait', 'secMarket', 'secStats', 'secBoard', 'secAuction', 'secWon', 'secStandings', 'secBusted'];
+// set once the admin's resolve marks this team busted (state.busted = { year, ... });
+// the board page is replaced by the busted screen and the poll stops re-rendering the sale
+let BUSTED = null;
 function showOnly(ids) {
   const keep = new Set(ids);
   ALL_SECTIONS.forEach(id => { const e = document.getElementById(id); if (e) e.style.display = keep.has(id) ? '' : 'none'; });
@@ -547,6 +568,13 @@ async function handlePhaseChange(game) {
     showOnly(['secMarket', 'secStats']);
     await refreshMarket();
     await refreshMyStats();
+  } else if ((PHASE === 'board' || PHASE === 'auction') && await checkBusted()) {
+    // out of the game: the bank foreclosed at a prior resolve. Show the busted screen
+    // (final year results + standings) instead of a board this team cannot act on.
+    showOnly(['secStats', 'secBusted', 'secStandings']);
+    await showBusted();
+    await refreshMyStats();
+    await refreshStandings();
   } else if (PHASE === 'board' || PHASE === 'auction') {
     // COMBINED year page: operations (secBoard) and the sealed-bid sale (secAuction) on
     // one screen, locked in together. The game only uses 'board' now; 'auction' is kept
@@ -555,8 +583,12 @@ async function handlePhaseChange(game) {
     document.getElementById('boardYearLabel').textContent = 'Year ' + CUR_YEAR;
     document.getElementById('auctionYearLabel').textContent = 'Year ' + CUR_YEAR;
     submittedBids = {};
+    // Lock In stays disabled until the board and the sale have rendered: a click during
+    // the async load used to hit a null boardBaseSt and flash "Page not ready".
+    document.getElementById('btnLockYear').disabled = true;
     await refreshBoard(game.world);
     await refreshAuction(game.world);
+    if (!phaseStale(PHASE, seq)) document.getElementById('btnLockYear').disabled = false;
     await refreshMyStats();
   } else if (PHASE === 'resolve') {
     showOnly(['secStats', 'secWon', 'secStandings']);
@@ -733,7 +765,7 @@ const ST_PATHS = {
 };
 const ST_LBL = { OR: { x: 90, y: 140 }, ID: { x: 210, y: 190 }, MT: { x: 312, y: 88 }, WY: { x: 358, y: 192 }, CO: { x: 374, y: 298 }, NV: { x: 96, y: 292 }, UT: { x: 212, y: 336 } };
 
-let boardChoice = { herd: 'hold', cull: 'normal', cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: false, hire: 0 };
+let boardChoice = { herd: 'hold', cull: null, cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: false, hire: 0 };
 let boardBaseSt = null, boardWorld = null, boardSemen = [], boardFemales = [];
 
 // the ranch as it WILL be after this year's operations are applied (from the year
@@ -766,7 +798,8 @@ function applySemenSell(r) {
 // set this year's cull intensity (read by the engine at production; the genetic lift lands
 // at resolution, so the cull cards below telegraph the effect rather than the ops summary)
 function applyCull(r) {
-  if (boardChoice.cull && RanchEngine.CULL[boardChoice.cull]) r.cullMode = boardChoice.cull;
+  // cull REASON (Steven's dad, 9/07): what the bottom of the herd leaves for. Null = no focus.
+  r.cullFocus = (boardChoice.cull && RanchEngine.CULL_FOCUS[boardChoice.cull]) ? boardChoice.cull : null;
 }
 // buy the queued replacement-female lots outright; buyFemales adds head + cash + blends
 // genetics, honoring land, cash, and the integration cap at call time (post-expansion cash)
@@ -824,35 +857,72 @@ function choiceNumbers() {
 }
 
 async function refreshBoard(world) {
-  const { data: team } = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
+  let { data: team } = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
   if (!team || !team.state) return;
   // Snapshot the pre-decision state once per year so revising re-applies from a fixed base.
+  // Lock In Year (submitPlay) later writes this WHOLE cached object back, so if this
+  // first read raced the admin's just-committed resolve and missed the newest per-year
+  // snapshot, that snapshot would be silently and permanently lost on lock-in. Guard the
+  // one-time cache-establishment moment with a short bounded retry for the year that
+  // should just have closed, instead of trusting a single read.
   let baseRaw = localStorage.getItem(boardKey());
-  if (!baseRaw) { baseRaw = JSON.stringify(team.state); localStorage.setItem(boardKey(), baseRaw); }
+  if (!baseRaw) {
+    const expectYear = CUR_YEAR - 1;
+    for (let tries = 0; expectYear > 0 && tries < 6; tries++) {
+      const hist = team.state.yearHistory || [];
+      if (hist.some(h => h.year === expectYear)) break;
+      await new Promise(r => setTimeout(r, 400));
+      const fresh = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
+      if (fresh.data && fresh.data.state) team = fresh.data;
+    }
+    baseRaw = JSON.stringify(team.state);
+    localStorage.setItem(boardKey(), baseRaw);
+  }
   boardBaseSt = reviveState(JSON.parse(baseRaw));
   // O gate year-open: last year's hire decision becomes effective hands now, mirroring the
   // first step of decideYear. Must run before the hire control below is rendered or chosen.
   RanchEngine.activateHands(boardBaseSt);
   boardWorld = world || RanchEngine.newWorld();
-  boardChoice = { herd: 'hold', cull: 'normal', cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: !!(reviveState(JSON.parse(baseRaw)).tallowContract), hire: 0 };
+  boardChoice = { herd: 'hold', cull: null, cowBuy: {}, debt: 'hold', techs: [], semen: null, semenSell: {}, tallow: !!(reviveState(JSON.parse(baseRaw)).tallowContract), hire: 0 };
   boardSemen = (boardWorld && boardWorld.semenCatalog) || [];
   boardFemales = RanchEngine.makeFemaleBoard(boardWorld);
   const st = boardBaseSt, w = boardWorld, reg = RanchEngine.REGIONS[st.region];
   const sev = RanchEngine.droughtSeverity(w, st.region);
 
-  // Last-year recap strip: carries the Cattlemen's Weekly headline onto the board so the
-  // flow reads continuously (how last year closed -> decide this year), even if the
-  // instructor advanced quickly past the results screen. Year 1 has no prior year.
+  // Full Cattlemen's Weekly recap for the year that just closed, collapsible, open by
+  // default in years 2+, above the board (map/mandate/decisions). Replaces the old
+  // one-line strip: carries the whole year-end report onto the board so the flow reads
+  // continuously (how last year closed -> decide this year), even if the instructor
+  // advanced quickly past the results screen. Year 1 has no prior year.
   const recapEl = document.getElementById('boardRecap');
   if (st.lastStmt && CUR_YEAR > 1) {
-    const s = st.lastStmt;
-    recapEl.innerHTML =
-      `<div style="background:var(--surface2);border:1px solid var(--border);border-left:3px solid var(--sage);border-radius:0 5px 5px 0;padding:0.5rem 0.75rem;margin-bottom:0.7rem;font-size:0.8rem;color:var(--dim)">` +
-      `<span style="font-family:var(--mono);font-size:0.66rem;color:var(--sage);letter-spacing:0.08em;text-transform:uppercase">Last year closed</span> ` +
-      `Net <strong style="color:${s.net >= 0 ? 'var(--sand)' : '#d99079'}">${money(s.net)}</strong>, ` +
-      `now <strong style="color:var(--sand)">${st.herd.toLocaleString()}</strong> head, ` +
-      `cash <strong style="color:var(--sand)">$${Math.round(st.cash).toLocaleString()}</strong>, ` +
-      `${g('dollarBeef', '$Beef')} <strong style="color:var(--sand)">${RanchEngine.dollarBeef(st.g)}</strong>. Set this year\'s plan below.</div>`;
+    const priorYear = CUR_YEAR - 1;
+    const [{ data: pBulls }, { data: pTeams }] = await Promise.all([
+      supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', priorYear).order('created_at'),
+      supa.from('teams').select('*').eq('game_id', GAME_ID),
+    ]);
+    const pNameById = Object.fromEntries((pTeams || []).map(t => [t.id, t.name]));
+    // the closed year's market conditions were snapshotted at resolve (yearHistory[].world);
+    // games.world is already the new year's, so the wrap must not read it
+    let wPrior = w;
+    for (const t of (pTeams || [])) {
+      const e = t.state && t.state.yearHistory && t.state.yearHistory.find(x => x.year === priorYear && x.world);
+      if (e) { wPrior = Object.assign({}, w, e.world); break; }
+    }
+    const weekly = cattlemensWeekly(wPrior, pBulls || [], pTeams || [], st, pNameById, priorYear);
+    // the team's OWN results for the closed year (won bulls, bids, books) come first;
+    // the industry wrap follows. The books use lastStmt, which is the closed year's.
+    let mine = '';
+    try { mine = (await yearResultsHtml(priorYear, wPrior)).html; } catch (e) { console.warn('year results', e); }
+    const allTeamsHist = (pTeams || []).map(t => ({
+      name: t.name, isMe: t.id === TEAM_ID,
+      history: t.state ? (reviveState(t.state).yearHistory || []) : [],
+    }));
+    const traj = window.Recap ? window.Recap.trajectoryBlock(st.yearHistory || [], allTeamsHist) : '';
+    recapEl.innerHTML = `<details open style="margin-bottom:0.7rem">` +
+      `<summary style="cursor:pointer;font-family:var(--serif);font-weight:700;color:var(--tan);padding:0.3rem 0">` +
+      `Your Year ${priorYear} results and the Cattlemen's Weekly, Year ${priorYear} wrap (click to collapse)</summary>` +
+      `<div class="card" style="margin-bottom:0.7rem">` + mine + `</div>` + weekly + traj + `</details>`;
   } else { recapEl.innerHTML = ''; }
 
   // Situation banner (Frostpunk directional framing, colored by drought severity)
@@ -868,8 +938,18 @@ async function refreshBoard(world) {
   // Mandate (keep the archetype in front of the player every year)
   const arch = RanchEngine.ARCHETYPES[ARCHETYPE];
   const topKpis = Object.entries(arch.kpi).sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => KPI_NAME[k] || k);
+  // R (rare) made visible: how many other outfits in this game run the same objective.
+  // Counted from the live teams table (archetype is dealt once per outfit, so this is
+  // usually zero: six objectives, six ranches, and the same bull is worth different
+  // money at every table). Only a count is shown, never which outfit.
+  const { data: archRows } = await supa.from('teams').select('archetype').eq('game_id', GAME_ID);
+  const shareN = Math.max(0, (archRows || []).filter(t => t.archetype === ARCHETYPE).length - 1);
+  const rareLine = shareN === 0
+    ? `No other outfit in this game runs your objective. The bull you want is worth different money at every other table.`
+    : `${shareN} other ranch${shareN === 1 ? '' : 'es'} share${shareN === 1 ? 's' : ''} your objective. Expect to meet ${shareN === 1 ? 'it' : 'them'} on the same lots.`;
   document.getElementById('boardMandate').innerHTML =
-    `You run the <strong>${arch.label}</strong>. Your investors are scored on <strong>${topKpis.join('</strong> and <strong>')}</strong>.`;
+    `You run the <strong>${arch.label}</strong>. Your investors are scored on <strong>${topKpis.join('</strong> and <strong>')}</strong>.` +
+    `<div id="mandateRare" style="font-size:0.78rem;color:var(--dim);margin-top:0.35rem">${rareLine}</div>`;
 
   // Where you stand: value-anchored bars (mapped to an absolute scale, not a baseline
   // delta) so they show a real position that moves every year, including year 1.
@@ -907,7 +987,7 @@ async function refreshBoard(world) {
     `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${Math.round(util * 100)}%</span></div>` +
     (util < 1 ? `<div style="font-size:0.76rem;color:#d99079;margin-top:0.2rem">${(st.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length} bulls owned, only ${Math.round(util * 100)}% exploited. Understaffed: hire hands below.</div>` : '');
 
-  renderHerdOptions(); renderDebtOptions(); renderHireOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
+  renderHerdOptions(); renderCullOptions(); renderDebtOptions(); renderHireOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
   refreshDeals();
 }
@@ -959,12 +1039,19 @@ function renderSemenSell() {
   if (!eligible.length) { el.innerHTML = '<span style="color:var(--muted);font-size:0.82rem">You own no proven bulls (elite or premium) to collect semen from yet. Win one at the sale.</span>'; return; }
   el.innerHTML = eligible.map(({ b, i }) => {
     const db = RanchEngine.dollarBeef(b.truth);
-    const best = RanchEngine.bestSemenPrice(st, boardWorld, b);
+    const fee = semenFeeFor(b);
+    // honest hint (9/07): revenue is price^(1 - elasticity), so it only ever rises or only
+    // ever falls with price. Compare the two ends of the allowed range and say so.
+    const lo = RanchEngine.SEMEN_SELL.minPrice, hi = RanchEngine.SEMEN_SELL.maxPrice;
+    const gLo = RanchEngine.semenDemand(st, boardWorld, b, lo).gross, gHi = RanchEngine.semenDemand(st, boardWorld, b, hi).gross;
+    const best = gHi >= gLo ? hi : lo;
+    const hint = gHi >= gLo
+      ? `buyers for this bull do not walk when the price rises: $${hi} nets ${money(Math.round(gHi - fee))}, $${lo} only ${money(Math.round(gLo - fee))}`
+      : `buyers for this bull walk as the price rises: $${lo} nets ${money(Math.round(gLo - fee))}, $${hi} only ${money(Math.round(gHi - fee))}`;
     const cur = boardChoice.semenSell[i];
     const open = cur != null && cur > 0;
     const price = open ? cur : best;
     const demo = RanchEngine.semenDemand(st, boardWorld, b, price);
-    const fee = semenFeeFor(b);
     const net = Math.round(demo.gross - fee);
     return `<div style="border:1px solid var(--border);border-radius:5px;padding:0.55rem 0.7rem;margin-bottom:0.4rem;background:var(--surface2)">
       <div style="display:flex;align-items:baseline;gap:0.5rem;font-size:0.84rem;flex-wrap:wrap">
@@ -977,8 +1064,8 @@ function renderSemenSell() {
         <div style="display:flex;align-items:center;gap:0.5rem;font-size:0.8rem">
           <span style="color:var(--dim)">$/${g('straw', 'straw')}</span>
           <input type="number" min="5" max="100" value="${price}" style="width:78px;margin:0" oninput="setSemenPrice(${i},this.value)">
-          <span style="color:var(--muted)">suggested $${best}</span>
         </div>
+        <div style="font-size:0.74rem;color:var(--muted);margin-top:0.25rem">${hint}${(gHi - fee) < 0 && (gLo - fee) < 0 ? '. Neither covers the fee: listing him loses money.' : '.'}</div>
         <div id="selldemo_${i}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem">${semenSellDemoText(demo, net, fee)}</div>
       </div>
     </div>`;
@@ -1122,25 +1209,19 @@ function renderHerdOptions() {
 // ---- Culling: how hard you select the bottom of the herd (A1) ----
 function renderCullOptions() {
   const el = document.getElementById('optCull'); if (!el) return;
-  const st = boardBaseSt, w = boardWorld;
+  const st = boardBaseSt;
+  const F = RanchEngine.CULL_FOCUS, yrs = st.cullYears || {};
+  const n = k => yrs[k] || 0;
   const gAvg = RanchEngine.avg(RanchEngine.TRAITS.map(t => st.g[t]));
-  const feeder = Math.pow(w.feederIdx || 1, 0.54);            // FEEDER_ELASTICITY
-  const ceil = RanchEngine.CULL_CEIL, normalRate = RanchEngine.CULL.normal.rate;
-  const card = (mode, title) => {
-    const cm = RanchEngine.CULL[mode];
-    const cull = Math.round(st.herd * cm.rate);
-    const herdDelta = Math.round(st.herd * cm.herd);
-    const extraCash = Math.round(st.herd * Math.max(0, cm.rate - normalRate) * 1150 * feeder);
-    const drift = Math.max(0, (ceil - gAvg) * cm.gain);
-    let d = 'Cull ~' + cull.toLocaleString() + ' head. ';
-    if (herdDelta > 0) d += 'Herd +' + herdDelta.toLocaleString() + '. ';
-    else if (herdDelta < 0) d += 'Herd ' + herdDelta.toLocaleString() + '. ';
-    else d += 'Herd holds. ';
-    if (extraCash > 0) d += '+$' + extraCash.toLocaleString() + ' now. ';
-    d += 'Genetics ' + (drift >= 0.03 ? '+' + drift.toFixed(2) + '/yr' : 'about flat');
-    return optCard('cull', mode, title, d, boardChoice.cull === mode);
-  };
-  el.innerHTML = card('light', 'Light') + card('normal', 'Normal') + card('hard', 'Hard');
+  const geneLift = Math.max(0, (RanchEngine.CULL_CEIL - gAvg) * F.genetics.gain);
+  const cards = [
+    ['fertility', 'Fertility', 'Open cows go. Calving rate +' + (F.fertility.rate * 100).toFixed(1) + ' pts per year of focus, up to ' + F.fertility.cap + ' years.'],
+    ['structure', 'Feet and udders', 'Unsound cows go. Cow cost -' + (F.structure.cowCost * 100).toFixed(1) + '% per year of focus (up to ' + F.structure.cap + '), and herd bulls are lost half as often.'],
+    ['genetics', 'Genetics', 'The genetic bottom goes. Herd traits +' + geneLift.toFixed(2) + ' this year (selection alone plateaus at ' + RanchEngine.CULL_CEIL + ').'],
+    ['disposition', 'Disposition', 'The wild ones go. Quiet cattle need ' + (F.disposition.hands * 100).toFixed(0) + '% fewer hands per year of focus, up to ' + F.disposition.cap + ' years.'],
+  ];
+  el.innerHTML = cards.map(([k, title, d]) =>
+    optCard('cull', k, title + (n(k) ? ' (' + n(k) + ' yr' + (n(k) === 1 ? '' : 's') + ' so far)' : ''), d, boardChoice.cull === k)).join('');
 }
 // ---- Cow Market: fixed-price replacement-female offer board (A1 buy side) ----
 function renderCowMarket() {
@@ -1707,6 +1788,13 @@ function renderBullCards(bulls, world, st, bidMap) {
         `<strong style="font-family:var(--serif);font-size:1.05rem">${esc(b.name || b.sire)}</strong>` +
         `<span class="tag ${tierClass}" style="margin-left:auto">${b.tier}</span>` +
       `</div>` +
+      // liquidation lot: a busted rival's herd sire, back in the ring (Steven 9/07)
+      ((b.meta && b.meta.liquidation)
+        ? `<div style="font-size:0.76rem;color:#d99079;margin-bottom:0.25rem"><b>Liquidation lot</b>: from ${esc(b.meta.liquidation.from || 'a busted outfit')}, ` +
+          `bought in Year ${b.meta.liquidation.boughtYear}` +
+          (b.meta.liquidation.paid ? ` for $${Math.round(b.meta.liquidation.paid).toLocaleString()}` : '') +
+          `. The bank wants its money; reserve unchanged.</div>`
+        : '') +
       // real Red Bluff lots carry their breeding and consignor plus the actual EPD line
       (b.name ? `<div style="font-size:0.74rem;color:var(--muted);margin-bottom:0.15rem">` +
           `${esc((b.meta && b.meta.breed) || '')} by ${esc(b.sire)}` +
@@ -1810,9 +1898,45 @@ async function submitBid(bullId, reserve) {
 }
 
 // ---- Results after resolve ----
-async function showResults(world) {
+// ---- Bust-out (Steven 9/07). The admin's resolve marks a team busted when its equity
+// goes negative (worth less than it owes); its sale bulls are
+// re-listed as liquidation lots and the cows go to the bank. Here: detect it and show
+// the final screen. ----
+async function checkBusted() {
+  if (!TEAM_ID) return false;
+  const { data: me } = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
+  BUSTED = (me && me.state && me.state.busted) ? me.state.busted : null;
+  return !!BUSTED;
+}
+async function showBusted() {
+  const el = document.getElementById('cardBusted');
+  if (!el || !BUSTED) return;
+  const { data: me } = await supa.from('teams').select('state').eq('id', TEAM_ID).single();
+  const st = me && me.state ? reviveState(me.state) : null;
+  const snap = st && st.yearHistory ? st.yearHistory.find(x => x.year === BUSTED.year && x.world) : null;
+  const wB = Object.assign({}, RanchEngine.newWorld(), snap ? snap.world : {}, { year: BUSTED.year });
+  const why = BUSTED.reason === 'equity'
+    ? 'the operation was worth less than it owed'
+    : 'two straight years closed with the account overdrawn';
+  let html = `<div style="font-family:var(--serif);font-size:1.25rem;color:#d99079;margin-bottom:0.5rem">` +
+    `The bank foreclosed after Year ${BUSTED.year}.</div>` +
+    `<div style="font-size:0.9rem;margin-bottom:0.8rem">Cash closed at <b>$${Number(BUSTED.cash || 0).toLocaleString()}</b> and ${why}. ` +
+    `The cows went to the bank` +
+    (BUSTED.bullsToRing ? ` and your ${BUSTED.bullsToRing} herd sire${BUSTED.bullsToRing === 1 ? '' : 's'} went to the Year ${BUSTED.year + 1} ring as liquidation lots for the other outfits to bid on.` : `.`) +
+    ` You are out of the game; the standings below keep updating, and the debrief still counts your play.</div>`;
+  try { html += (await yearResultsHtml(BUSTED.year, wB)).html; } catch (e) { console.warn('busted results', e); }
+  el.innerHTML = html;
+}
+
+// Per-team year results (won bulls + bids, ranch after the year, bull losses, the
+// books). Shared by the resolve screen (showResults) and the next year's board page
+// (refreshBoard), so a one-click resolve-and-open-next never hides a team's own
+// results: they render above the decisions for the new year (Steven 9/07: results and
+// decisions on ONE page). `yr` is the year the results are for; `world` is that year's
+// world (the board page passes the snapshotted prior-year world).
+async function yearResultsHtml(yr, world) {
   const [{ data: bulls }, { data: teams }] = await Promise.all([
-    supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR).order('created_at'),
+    supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', yr).order('created_at'),
     supa.from('teams').select('*').eq('game_id', GAME_ID),
   ]);
   const nameById = Object.fromEntries((teams || []).map(t => [t.id, t.name]));
@@ -1830,7 +1954,7 @@ async function showResults(world) {
   // year clock expires before that team locked in on its own. Show it so the team knows
   // its plan for the year was the engine defaults (hold, no bids, no deals, hire 0).
   const { data: myDecs } = await supa.from('decisions').select('payload')
-    .eq('game_id', GAME_ID).eq('team_id', TEAM_ID).eq('year', CUR_YEAR).eq('kind', 'board_submitted');
+    .eq('game_id', GAME_ID).eq('team_id', TEAM_ID).eq('year', yr).eq('kind', 'board_submitted');
   const wasAutoLocked = (myDecs || []).some(d => d.payload && d.payload.auto_locked);
   let html = wasAutoLocked
     ? `<div style="background:#351d18;color:#d99079;border:1px solid #5a3128;border-radius:5px;padding:0.6rem 0.85rem;margin-bottom:0.8rem;font-size:0.86rem">` +
@@ -1872,6 +1996,12 @@ async function showResults(world) {
     }
     html += booksCard(st, world);
   }
+  return { html, bulls, teams, st, nameById };
+}
+async function showResults(world) {
+  const r = await yearResultsHtml(CUR_YEAR, world);
+  const { bulls, teams, st, nameById } = r;
+  let html = r.html;
   html += cattlemensWeekly(world, bulls || [], teams || [], st, nameById);
   html += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem">Waiting for the instructor to advance to the next year.</div>`;
 
@@ -1912,6 +2042,14 @@ async function winnersCurseDebrief(nameById) {
       `<td style="font-family:var(--mono);color:${col}">${surprise >= 0 ? '+' : ''}${surprise}</td>` +
       `<td style="font-family:var(--mono)">$${Math.round(Number(b.price || 0)).toLocaleString()}</td></tr>`;
   });
+  // Causal-ambiguity question: the priciest lot a RIVAL won is the thing you watched and
+  // could not explain; the objective reveal on the standings below is the answer key.
+  const rivalTop = bulls.filter(b => b.winner_team !== TEAM_ID && b.price)
+    .sort((a, b) => Number(b.price) - Number(a.price))[0];
+  const rivalWho = rivalTop ? esc(nameById[rivalTop.winner_team] || 'a rival') : 'a rival';
+  const ambiguityQ = rivalTop
+    ? `You watched <b>${rivalWho}</b> pay <b style="font-family:var(--mono)">$${Math.round(Number(rivalTop.price)).toLocaleString()}</b> for ${esc(rivalTop.name || rivalTop.sire)} in year ${rivalTop.year} and could not tell why. That is what a competitor sees looking at Hermes: the outcome is public, the reason is not. The standings below now reveal every outfit's objective. Could you have told from the bidding alone which outfit ran which objective? Where did you guess a rival's reason and get it wrong?`
+    : `Every lot a rival won was bought for a reason you could not see from the price. That is what a competitor sees looking at Hermes: the outcome is public, the reason is not. The standings below now reveal every outfit's objective. Could you have told from the bidding alone which outfit ran which objective?`;
   const avg = myN ? (mySurprise / myN) : 0;
   const verdict = !myN ? 'You bought no bulls at auction, so the curse never had a chance to bite.'
     : avg <= -4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won ($${Math.round(mySpend).toLocaleString()}), the true genetics averaged <b style="color:#d99079">${avg.toFixed(0)} $Beef below</b> the catalog. That is the winner\'s curse: you tended to win the lots you most overvalued.`
@@ -1920,6 +2058,8 @@ async function winnersCurseDebrief(nameById) {
   return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
     `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">Winner's-Curse Debrief</div>` +
     `<div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.6rem">${verdict}</div>` +
+    `<div id="debriefAmbiguity" style="font-size:0.8rem;color:var(--text);border-left:3px solid var(--sage);padding:0.4rem 0.7rem;margin-bottom:0.7rem;background:var(--surface)">` +
+    `<span style="font-family:var(--mono);font-size:0.66rem;color:var(--sage);letter-spacing:0.08em;text-transform:uppercase">Debrief question, causal ambiguity</span><br>${ambiguityQ}</div>` +
     `<div style="overflow-x:auto"><table style="width:100%;font-size:0.8rem"><thead><tr>` +
     `<th>Yr</th><th>Bull</th><th>Tier</th><th>Winner</th><th>${g('dollarBeef', 'Cat $B')}</th><th>True $B</th><th>Surprise</th><th>Price</th>` +
     `</tr></thead><tbody>${rows}</tbody></table></div></div>`;
@@ -1990,6 +2130,7 @@ function booksCard(st, w) {
       row('Net for the year', s.net, { rule: true, strong: true }) +
       `</table>` +
       (s.hands != null ? `<div style="font-size:0.72rem;margin-top:0.35rem;color:${s.utilPenalty > 0 ? '#d99079' : 'var(--muted)'}">` +
+        (s.cullFocus ? `Culled for ${RanchEngine.CULL_FOCUS[s.cullFocus] ? RanchEngine.CULL_FOCUS[s.cullFocus].label.toLowerCase() : s.cullFocus} (year ${(s.cullYears && s.cullYears[s.cullFocus]) || 1} of focus). ` : '') +
         `${s.hands} hands managing ${s.activeBulls} active bull${s.activeBulls === 1 ? '' : 's'}, ${Math.round((s.utilization || 0) * 100)}% exploited` +
         (s.utilPenalty > 0 ? `. Understaffing cost ~${money(s.utilPenalty)} of genetics this year.` : '.') +
         `</div>` : '') +
@@ -2014,8 +2155,12 @@ function booksCard(st, w) {
 // ---- Cattlemen's Weekly: the year-end industry report (the Capsim Courier / Glo-Bus
 // FIR move: public benchmarks + a noisy analyst outlook, so teams learn to read the
 // market instead of only their own books) ----
-function cattlemensWeekly(w, bulls, teams, myState, nameById) {
+function cattlemensWeekly(w, bulls, teams, myState, nameById, yr) {
   if (!w) return '';
+  // Y lets the board-screen recap render the YEAR THAT JUST CLOSED even though CUR_YEAR
+  // has already advanced to the new year by the time this recap is built there; the
+  // results-screen call site omits yr and keeps using the live CUR_YEAR as before.
+  const Y = yr != null ? yr : CUR_YEAR;
   const sold = bulls.filter(b => b.winner_team && b.price);
   const gross = sold.reduce((s, b) => s + Number(b.price), 0);
   const top = sold.slice().sort((a, b) => Number(b.price) - Number(a.price))[0];
@@ -2024,11 +2169,14 @@ function cattlemensWeekly(w, bulls, teams, myState, nameById) {
   const dF = (w.feederIdx / prevF - 1) * 100;
   // public table: operational facts only, never a strategy label
   const states = teams.map(t => ({ name: t.name, st: t.state ? reviveState(t.state) : null, isMe: t.id === TEAM_ID }))
-    .filter(x => x.st);
-  const rows = states.slice().sort((a, b) => b.st.herd - a.st.herd).map(x =>
+    .filter(x => x.st && !(x.st.busted && x.st.busted.year < Y));
+  const bustLine = states.filter(x => x.st.busted && x.st.busted.year === Y).map(x =>
+    `<div style="font-size:0.85rem;color:#d99079;margin-top:0.4rem"><b>${esc(x.name)}${x.isMe ? ' (you)' : ''}</b> went under this year` +
+    (x.st.busted.bullsToRing ? `; ${x.st.busted.bullsToRing} herd sire${x.st.busted.bullsToRing === 1 ? '' : 's'} go to next year's ring as liquidation lots.` : '.') + `</div>`).join('');
+  const rows = states.filter(x => !x.st.busted).slice().sort((a, b) => b.st.herd - a.st.herd).map(x =>
     `<tr${x.isMe ? ' style="background:#2f2513"' : ''}><td>${esc(x.name)}${x.isMe ? ' (you)' : ''}</td>` +
     `<td style="font-family:var(--mono)">${x.st.herd.toLocaleString()}</td>` +
-    `<td style="font-family:var(--mono)">${(x.st.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length}</td>` +
+    `<td style="font-family:var(--mono)">${(x.st.bulls || []).filter(b => Y - b.boughtYear < 4).length}</td>` +
     `<td style="font-family:var(--mono)">${Math.round(x.st.rep || 0)}</td></tr>`).join('');
   // your books vs the room (cost per lb is private; only YOUR line and the median print)
   let books = '';
@@ -2050,9 +2198,9 @@ function cattlemensWeekly(w, bulls, teams, myState, nameById) {
   if (h.length >= 1 && h[h.length - 1] === 'severe') echo -= 0.03;
   if (h.length >= 2 && h[h.length - 2] === 'severe') echo += 0.07;
   const call = w.feederIdx * (1 + 0.01 + echo);
-  const yearDone = CUR_YEAR >= RanchEngine.YEARS;
+  const yearDone = Y >= ((w && Number(w.totalYears)) || RanchEngine.YEARS);
   const outlook = yearDone ? '' :
-    `<div style="font-size:0.82rem;margin-top:0.55rem"><b>Analyst outlook for year ${CUR_YEAR + 1}:</b> ` +
+    `<div style="font-size:0.82rem;margin-top:0.55rem"><b>Analyst outlook for year ${Y + 1}:</b> ` +
     `drought odds ${Math.round(t.severe * 100)}% severe / ${Math.round(t.moderate * 100)}% moderate / ${Math.round(mildP * 100)}% mild. ` +
     `${g('feederIdx', 'Feeder index')} called at <b style="font-family:var(--mono)">${call.toFixed(2)}</b> ` +
     `(range ${(call * 0.90).toFixed(2)} to ${(call * 1.10).toFixed(2)})` +
@@ -2060,14 +2208,14 @@ function cattlemensWeekly(w, bulls, teams, myState, nameById) {
     ` <span style="color:var(--muted)">No analyst prints next year's shock.</span></div>`;
   return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
     `<div style="font-family:var(--serif);font-weight:700;font-size:1.02rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.5rem">` +
-    `The Cattlemen's Weekly <span style="font-family:var(--mono);font-weight:400;font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">YEAR ${CUR_YEAR} WRAP</span></div>` +
+    `The Cattlemen's Weekly <span style="font-family:var(--mono);font-weight:400;font-size:0.68rem;color:var(--dim);letter-spacing:0.08em">YEAR ${Y} WRAP</span></div>` +
     `<div style="font-size:0.82rem">${g('feederIdx', 'Feeder index')} closed at <b style="font-family:var(--mono)">${(w.feederIdx || 1).toFixed(2)}</b> ` +
     `(${dF >= 0 ? '+' : ''}${dF.toFixed(0)}% on the year) under ${esc(SHOCK_WORD[w.shock] || w.shock)}, ${esc(w.drought)} drought conditions. ` +
     (w.tallowIdx ? `The ${g('tallow', 'tallow')} index sat at <b style="font-family:var(--mono)">${w.tallowIdx.toFixed(2)}</b>, on its own cycle apart from cattle. ` : '') +
     (sold.length
       ? `The bull sale grossed <b style="font-family:var(--mono)">$${Math.round(gross).toLocaleString()}</b> on ${sold.length} of ${bulls.length} lots` +
         (top ? `, topped by ${esc(top.name || top.sire)} at <b style="font-family:var(--mono)">$${Math.round(top.price).toLocaleString()}</b> to ${esc(nameById[top.winner_team] || 'a ranch')}.` : `.`)
-      : `Every lot in the bull sale went home unsold, a no-sale year.`) + `</div>` +
+      : `Every lot in the bull sale went home unsold, a no-sale year.`) + `</div>` + bustLine +
     `<table style="margin-top:0.55rem;font-size:0.8rem"><thead><tr><th>Outfit</th><th>Herd</th><th>Herd sires</th><th>${g('reputation', 'Rep')}</th></tr></thead>` +
     `<tbody>${rows}</tbody></table>` +
     books + outlook + `</div>`;
@@ -2078,8 +2226,11 @@ async function refreshStandings() {
   const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
   const rows = (teams || []).map(t => {
     const st = t.state ? reviveState(t.state) : null;
-    return { name: t.name, cash: st ? Math.round(st.cash) : 0, isMe: t.id === TEAM_ID };
-  }).sort((a, b) => b.cash - a.cash);
+    return { name: t.name, cash: st ? Math.round(st.cash) : 0, isMe: t.id === TEAM_ID, arch: t.archetype,
+             busted: st && st.busted ? st.busted.year : 0 };
+  }).sort((a, b) => (a.busted ? 1 : 0) - (b.busted ? 1 : 0) || b.cash - a.cash);
+  // objective reveal: only once the game has ended (objectives stay secret while it runs)
+  const reveal = PHASE === 'ended';
   const maxCash = Math.max(...rows.map(r => r.cash), 1);
   const tbody = document.getElementById('tbodyStandings');
   tbody.innerHTML = '';
@@ -2087,9 +2238,11 @@ async function refreshStandings() {
     const tr = document.createElement('tr');
     const barW = Math.max(2, Math.round(r.cash / maxCash * 100));
     tr.style.fontWeight = r.isMe ? 'bold' : '';
-    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.name)}${r.isMe ? ' (you)' : ''}</td>` +
-      `<td>$${r.cash.toLocaleString()}</td>` +
-      `<td><span class="lb-bar" style="width:${barW}px"></span></td>`;
+    const archTag = reveal ? ` <span class="reveal-arch" style="font-family:var(--mono);font-size:0.68rem;color:var(--tan);letter-spacing:0.04em">ran ${esc(RanchEngine.ARCHETYPES[r.arch]?.label || r.arch || '?')}</span>` : '';
+    const bustTag = r.busted ? ` <span style="font-family:var(--mono);font-size:0.68rem;color:#d99079;letter-spacing:0.04em">busted yr ${r.busted}</span>` : '';
+    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.name)}${r.isMe ? ' (you)' : ''}${archTag}${bustTag}</td>` +
+      `<td>${r.busted ? '-' : '$' + r.cash.toLocaleString()}</td>` +
+      `<td><span class="lb-bar" style="width:${r.busted ? 2 : barW}px"></span></td>`;
     tbody.appendChild(tr);
   });
   // visibility owned by showOnly(); refreshStandings only updates the data
@@ -2106,6 +2259,7 @@ function startPolling() {
       if (PHASE === 'market') await refreshMarket();
       // combined page: if the sale rendered empty (bulls arrived just after the phase
       // flip), fill it once. Never re-render while lots are present, so typed bids/ops stay.
+      if (BUSTED) { await refreshStandings(); return; }
       if (PHASE === 'board' && !document.querySelector('#bullCards > div')) await refreshAuction(game.world);
       if (PHASE === 'board') await refreshDeals();  // live incoming/accepted offers
       if (PHASE === 'resolve' || PHASE === 'ended') await refreshStandings();

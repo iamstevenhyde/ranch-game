@@ -300,6 +300,31 @@ const CULL_POLICY = {
 };
 function cullMode(r) { return CULL[r.cullMode] ? r.cullMode : 'normal'; }
 
+// ---------- cull REASON (Steven's dad, 9/07): not how hard, but what you cull for ----------
+// The intensity dial above is retired as a player lever (the cull rate is the normal 3.5%
+// for everyone). The board decision is WHY the bottom of the herd leaves: open cows
+// (fertility), feet/legs/udders (structure), the genetic bottom (genetics), or the wild
+// ones (disposition). Each reason pays through a different line of the operation and the
+// effect accumulates per year of focus, staying in the herd. One focus per year, so a
+// ranch cannot fix everything at once: that is the tradeoff.
+const CULL_FOCUS = {
+  fertility:   { label: 'Fertility',   rate: 0.008, cap: 3 },   // +0.8 pt calving rate per focus year, cap 3 yrs
+  structure:   { label: 'Structure',   cowCost: 0.015, cap: 4 }, // -1.5% cow cost per focus year; bull loss halved
+  genetics:    { label: 'Genetics',    gain: 0.035 },            // selection gain 3.5% of the gap to CULL_CEIL (normal 1%)
+  disposition: { label: 'Disposition', hands: 0.07, cap: 3 },    // -7% hands required per focus year, cap 3 yrs
+};
+const CULL_FOCUS_AI = {
+  elite_genetics: 'genetics', seedstock: 'genetics', naive_roi: 'genetics',
+  family_survival: 'fertility', conservative: 'fertility', rapid_expansion: 'fertility',
+  cost_leader: 'disposition', passive: null,
+};
+function cullFocus(r) { return CULL_FOCUS[r.cullFocus] ? r.cullFocus : null; }
+function cullYears(r, key) { return (r.cullYears && r.cullYears[key]) || 0; }
+// disposition: quiet cattle need fewer hands (applies to the management crew and the day crew)
+function dispositionSave(r) {
+  return Math.min(cullYears(r, 'disposition'), CULL_FOCUS.disposition.cap) * CULL_FOCUS.disposition.hands;
+}
+
 // ---------- replacement-female market (A1 buy side; fixed-price offer board) ----------
 // No female lot data exists (the Red Bluff catalog is bulls), so the board is a synthetic
 // three-tier offering posted at a fixed price each year, scaled by the feeder index.
@@ -484,7 +509,7 @@ function handsRequired(r, w) {
   const activeN = r.bulls.filter(b => w.year - b.boughtYear < 4).length;
   let save = 0;
   for (const t of r.tech) save += TECHS[t].laborSave;
-  return activeN * HANDS_PER_BULL * (1 - clamp(save, 0, 0.55));
+  return activeN * HANDS_PER_BULL * (1 - clamp(save, 0, 0.55)) * (1 - dispositionSave(r));
 }
 function utilization(r, w) {
   const req = handsRequired(r, w);
@@ -658,6 +683,7 @@ function makeRanch(key, l) {
     tech: new Set(), bulls: startingBulls(g, rosterCap), semen: null, tallowContract: false,
     landCap: l.landCap, rosterCap,
     hands: startingHands(l, key), handsPending: 0,
+    cullFocus: null, cullYears: { fertility: 0, structure: 0, genetics: 0, disposition: 0 },
     peakEquity: 0, maxDrawdown: 0, totalCost: 0, totalLbs: 0, premSum: 0, premN: 0,
     revHist: [], semenRoyalty: 0, lastStmt: null,
   };
@@ -774,6 +800,8 @@ function cowCost(r, w) {
   feedBump *= (1 - clamp(mit, 0, 0.7));
   c *= (1 + feedBump * 0.6);
   if (w.shock === 'cheap_feed') c *= 0.88;
+  // structure culling: sound feet, legs and udders mean fewer replacements and less vet
+  c *= (1 - Math.min(cullYears(r, 'structure'), CULL_FOCUS.structure.cap) * CULL_FOCUS.structure.cowCost);
   return c;
 }
 function laborCost(r, w) {
@@ -786,7 +814,7 @@ function laborCost(r, w) {
   }
   // VF and stockmanship are complements (tech profiling finding 5)
   if (r.tech.has('vfence') && r.tech.has('dogs')) save += 0.06;
-  hands *= (1 - clamp(save, 0, 0.55));
+  hands *= (1 - clamp(save, 0, 0.55)) * (1 - dispositionSave(r));
   let wage = WAGE_BASE * reg.laborCost * w.wageRatchet;
   // tech-skill premium by scale: micro +25%, mid +15%, large +10%
   if (r.tech.has('vfence') || r.tech.has('drone')) {
@@ -801,15 +829,15 @@ function productionYear(r, w) {
   // counted. Harder culls shrink the cow herd (fewer calves now) but sell mature cows for
   // cash; the genetic lift lands in the genetics-evolution block below. Passive keeps its
   // own do-nothing cull (herd * 0.88 further down), so it is exempt here.
+  // cull REASON (see CULL_FOCUS): the normal cull-and-replace runs for everyone; this
+  // year's focus adds a year to its counter, and the effects below read the counters.
+  // cullCash stays on the statement (always 0 now) so the books card keeps its shape.
   let cullCash = 0;
-  if (r.key !== 'passive') {
-    const cm = CULL[cullMode(r)];
-    const headDelta = Math.round(r.herd * cm.herd);
-    if (headDelta !== 0) r.herd = Math.max(80, r.herd + headDelta);
-    const extraCull = Math.max(0, cm.rate - CULL.normal.rate); // cull above the baked-in replacement rate
-    cullCash = r.herd * extraCull * CULL_COW_PRICE * Math.pow(w.feederIdx, FEEDER_ELASTICITY);
-  }
-  let rate = 0.88 + (r.g.ce - 5) * 0.004 - sev * 0.06;
+  const focus = r.key === 'passive' ? null : cullFocus(r);
+  if (!r.cullYears) r.cullYears = { fertility: 0, structure: 0, genetics: 0, disposition: 0 };
+  if (focus) r.cullYears[focus] = (r.cullYears[focus] || 0) + 1;
+  const fertBonus = Math.min(cullYears(r, 'fertility'), CULL_FOCUS.fertility.cap) * CULL_FOCUS.fertility.rate;
+  let rate = 0.88 + (r.g.ce - 5) * 0.004 - sev * 0.06 + fertBonus;
   if (sev > 0.7 && r.tech.has('drone') && REGIONS[r.region].tech.drone >= 1.2) rate += sev * 0.018;
   const calves = r.herd * clamp(rate, 0.6, 0.97);
   const lbs = 550 + (r.g.growth - 5) * 12 + Math.max(0, r.g.milk - 5) * 4 - sev * 35;
@@ -895,7 +923,7 @@ function productionYear(r, w) {
   // cull intensity into a real long-horizon genetics lever, and it offsets the unimproved
   // slide below so a hard-culling herd climbs even with no bull in the pasture.
   if (r.key !== 'passive') {
-    const cg = CULL[cullMode(r)].gain;
+    const cg = focus === 'genetics' ? CULL_FOCUS.genetics.gain : CULL.normal.gain;
     TRAITS.forEach(t => { if (r.g[t] < CULL_CEIL) r.g[t] += (CULL_CEIL - r.g[t]) * cg; });
   }
   const active = r.bulls.filter(b => w.year - b.boughtYear < 4);
@@ -933,6 +961,8 @@ function productionYear(r, w) {
   r.lastStmt.handsReq = handsRequired(r, w);
   r.lastStmt.activeBulls = active.length;
   r.lastStmt.utilPenalty = Math.round(utilPenalty);
+  r.lastStmt.cullFocus = focus;
+  r.lastStmt.cullYears = Object.assign({}, r.cullYears);
   // reputation dynamics
   let dRep = 0;
   if (r.a.marketing === 'premium') dRep += 2.5;
@@ -949,8 +979,9 @@ function productionYear(r, w) {
   // rare bull loss: he bred this season, then is gone (his coverage disappears next year).
   // Applies to active bulls of any origin, including inherited sires.
   let died = 0;
+  const deathP = BULL_DEATH * (focus === 'structure' ? 0.5 : 1); // sound bulls last
   r.bulls = r.bulls.filter(b => {
-    if (w.year - b.boughtYear < 4 && Math.random() < BULL_DEATH) { died++; return false; }
+    if (w.year - b.boughtYear < 4 && Math.random() < deathP) { died++; return false; }
     return true;
   });
   r.lastBullDeaths = died;
@@ -965,6 +996,8 @@ function decideYear(r, w) {
   // cull intensity by objective: genetics / reputation archetypes select hard, headcount
   // chasers keep everyone, the rest run a standard cull-and-replace (humans pick their own)
   r.cullMode = CULL_POLICY[r.key] || 'normal';
+  // cull REASON by objective (humans pick their own on the board)
+  r.cullFocus = CULL_FOCUS_AI[r.key] || null;
   // distress: borrow first if the archetype tolerates debt, then fire-sale cows
   if (r.cash < 0 && a.debtCap > 0) {
     const room = a.debtCap * Math.max(0, equity(r, w)) - r.debt;
@@ -1234,6 +1267,9 @@ if (typeof window !== 'undefined') {
     tallowRevenue,
     CULL,
     CULL_CEIL,
+    CULL_FOCUS,
+    CULL_FOCUS_AI,
+    cullFocus,
     FEMALE_TIERS,
     makeFemaleBoard,
     buyFemales,
@@ -1308,6 +1344,9 @@ if (typeof window !== 'undefined') {
     tallowRevenue,
     CULL,
     CULL_CEIL,
+    CULL_FOCUS,
+    CULL_FOCUS_AI,
+    cullFocus,
     FEMALE_TIERS,
     makeFemaleBoard,
     buyFemales,

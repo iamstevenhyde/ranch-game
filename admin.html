@@ -77,6 +77,10 @@
     <h2>Create Game</h2>
     <div class="card">
       <div class="row">
+        <label style="font-size:0.85rem;margin-right:0.6rem">Years
+          <select id="gameYears" style="margin-left:0.3rem">
+            <option value="3">3</option><option value="4">4</option><option value="5" selected>5</option>
+          </select></label>
         <button id="btnCreate" onclick="createGame()">Create New Game</button>
         <span class="status">Generates a 5-letter join code for students.</span>
       </div>
@@ -130,6 +134,7 @@
   <section id="secBoard" style="display:none">
     <h2>Year in Progress <span id="boardYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
     <div class="card">
+      <div id="adminRecap"></div>
       <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.8rem">
         Teams set operations (expand/destock, debt, technology, semen) and place sealed bids on
         one page, then lock in. AI ranches have already decided. Resolve the year when teams are ready.
@@ -164,8 +169,8 @@
       </table>
       <div id="adminDeals" style="margin-top:1rem"></div>
       <div class="row" style="margin-top:1rem">
-        <button id="btnResolve" onclick="resolveAuction()">Resolve Year</button>
-        <button id="btnNextYear" onclick="nextYear()" style="display:none" class="secondary">Advance to Next Year</button>
+        <button id="btnResolve" onclick="resolveAuction()">Resolve &amp; Open Next Year</button>
+        <button id="btnNextYear" onclick="nextYear()" style="display:none" class="secondary">Advance to Next Year (manual fallback)</button>
         <span class="status" id="auctionStatus">Collecting operations and sealed bids.</span>
       </div>
     </div>
@@ -191,7 +196,8 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=eac9f6857c"></script>
+<script src="engine.js?v=1701580de8"></script>
+<script src="recap.js?v=67b2825eaf"></script>
 <script>
 'use strict';
 
@@ -241,14 +247,18 @@ function showSection(id) {
 async function createGame() {
   document.getElementById('btnCreate').disabled = true;
   JOIN_CODE = randCode();
+  // game length (Steven 9/07): stored on the world blob (no schema change). Bids value a
+  // bull over the years actually left, and the game ends after this many years.
+  const totalYears = Number((document.getElementById('gameYears') || {}).value) || RanchEngine.YEARS;
+  const world0 = Object.assign(RanchEngine.newWorld(), { totalYears });
   const { data, error } = await supa.from('games').insert({
-    join_code: JOIN_CODE, status: 'lobby', phase: 'lobby', year: 0, world: null
+    join_code: JOIN_CODE, status: 'lobby', phase: 'lobby', year: 0, world: world0
   }).select().single();
   if (error) { msg('Error creating game: ' + error.message, 'err'); document.getElementById('btnCreate').disabled = false; return; }
   GAME_ID = data.id;
 
   // Log game creation to decisions
-  await logDecision(null, 'game_created', { join_code: JOIN_CODE });
+  await logDecision(null, 'game_created', { join_code: JOIN_CODE, total_years: totalYears });
 
   document.getElementById('joinCodeDisplay').textContent = JOIN_CODE;
   document.getElementById('joinCodeBox').style.display = '';
@@ -289,6 +299,7 @@ async function resumeGame() {
     subscribeToAuction();
     await refreshBoard();
     await refreshAuction();
+    await renderAdminRecapBlock();
   } else if (g.phase === 'resolve') {
     showSection('secBoard');
     document.getElementById('secAuction').style.display = '';
@@ -340,6 +351,11 @@ const AI_NAMES = [
 
 async function startGame() {
   document.getElementById('btnStart').disabled = true;
+  // Re-read the roster from the DB at the moment of dealing: a student who joined in the
+  // last few seconds may not be in the polled TEAMS list yet, and dealing from a stale list
+  // handed an AI outfit that student's objective (seen in the 2026-09-02 verify run).
+  const { data: freshTeams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
+  if (freshTeams) TEAMS = freshTeams;
   const humanTeams = TEAMS.filter(t => !t.is_ai);
   const usedArch   = humanTeams.map(t => t.archetype);
   const allArch    = Object.keys(RanchEngine.ARCHETYPES).filter(k => !RanchEngine.ARCHETYPES[k].probe);
@@ -372,8 +388,9 @@ async function startGame() {
   const { error: rErr } = await supa.from('ranches').insert(ranchRows);
   if (rErr) { msg('Error inserting ranches: ' + rErr.message, 'err'); return; }
 
-  // Advance to market phase
-  const world = RanchEngine.newWorld();
+  // Advance to market phase (keep the game length chosen at Create Game on the world blob)
+  const { data: gPrev } = await supa.from('games').select('world').eq('id', GAME_ID).single();
+  const world = Object.assign(RanchEngine.newWorld(), { totalYears: gameYears(gPrev && gPrev.world) });
   await supa.from('games').update({ status: 'active', phase: 'market', year: 0, world }).eq('id', GAME_ID);
   CUR_YEAR = 0;
 
@@ -572,6 +589,12 @@ async function openYear() {
   // AI ranches buy their ranches now (year 1 only; idempotent), AFTER the humans have
   // taken first pick, then make operational decisions.
   await aiMarketPurchases();
+  // Year-0 baseline snapshot (once): every team, human or AI, gets its post-purchase
+  // state recorded before any year plays, so the trajectory sparklines have a real
+  // starting point (2 entries by the Year-2 board recap, 3 by Year-3's) instead of
+  // starting from a flat single dot. Covers both the manual-market path and Assign
+  // Ranches, since both funnel first-time-open through here.
+  if (CUR_YEAR === 1) await writeBaselineSnapshots();
   await applyAiDecisions(world);
   // generate this year's bulls up front so they appear on the combined team page
   await generateBulls(world);
@@ -593,6 +616,7 @@ async function openYear() {
   startPolling();
   refreshBoard();
   refreshAuction();
+  await renderAdminRecapBlock();
   document.getElementById('btnAssignRanches').disabled = false;
   openingYear = false;
 }
@@ -622,7 +646,7 @@ async function applyAiDecisions(world) {
   const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
   TEAMS = teams || [];
   for (const team of TEAMS) {
-    if (!team.is_ai || !team.state) continue;
+    if (!team.is_ai || !team.state || isBusted(team)) continue;
     const st = reviveState(team.state);
     const w2 = Object.assign({}, world, { year: CUR_YEAR });
     RanchEngine.decideYear(st, w2);
@@ -639,10 +663,12 @@ async function refreshBoard() {
   const submitted = new Map((decs || []).map(d => [d.team_id, d.payload || {}]));
   const tbody = document.getElementById('tbodyBoard');
   tbody.innerHTML = '';
-  const humans = TEAMS.filter(t => !t.is_ai);
+  const humans = TEAMS.filter(t => !t.is_ai && !isBusted(t));
   TEAMS.forEach(t => {
     const dec = submitted.get(t.id);
-    const badge = t.is_ai
+    const badge = isBusted(t)
+      ? '<span class="tag tag-autolock">BUSTED yr ' + t.state.busted.year + '</span>'
+      : t.is_ai
       ? '<span class="tag tag-ai">AI decided</span>'
       : (dec
           ? (dec.auto_locked ? '<span class="tag tag-autolock">AUTO-LOCKED</span>' : '<span class="tag tag-ready">READY</span>')
@@ -720,11 +746,11 @@ function tickClock() {
 async function autoLockExpiredTeams() {
   if (!GAME_ID) return;
   const [{ data: teams }, { data: decs }] = await Promise.all([
-    supa.from('teams').select('id, is_ai').eq('game_id', GAME_ID),
+    supa.from('teams').select('id, is_ai, state').eq('game_id', GAME_ID),
     supa.from('decisions').select('team_id').eq('game_id', GAME_ID).eq('year', CUR_YEAR).eq('kind', 'board_submitted'),
   ]);
   const submitted = new Set((decs || []).map(d => d.team_id));
-  const toLock = (teams || []).filter(t => !t.is_ai && !submitted.has(t.id));
+  const toLock = (teams || []).filter(t => !t.is_ai && !isBusted(t) && !submitted.has(t.id));
   for (const t of toLock) {
     // Hold operations (state is left untouched) and explicitly hire 0 when the engine
     // exports a hire control, so an auto-locked team never carries over a stale pending
@@ -835,12 +861,14 @@ function renderAuction(bulls, bidCount, humanCount, teamMap) {
   });
 
   // resolved state is driven by the game PHASE now (bulls exist during the combined
-  // year page with null winner/price, so a null-price check would fire prematurely)
+  // year page with null winner/price, so a null-price check would fire prematurely).
+  // resolveAuction() now advances to the next year itself, so the manual Advance button
+  // stays hidden (no-op fallback only) and never flashes on screen.
   const resolved = document.getElementById('phaseChip').textContent === 'resolve';
-  document.getElementById('btnNextYear').style.display = resolved ? '' : 'none';
+  document.getElementById('btnNextYear').style.display = 'none';
   document.getElementById('btnResolve').style.display = resolved ? 'none' : '';
   document.getElementById('auctionStatus').textContent = resolved
-    ? 'Year resolved. Review results, then advance to next year.'
+    ? 'Year resolved. Opening next year...'
     : 'Collecting operations and sealed bids from teams.';
 }
 
@@ -868,9 +896,9 @@ async function resolveAuction() {
   for (const bull of (bulls || [])) {
     const humanBids = bidsByBull[bull.id] || [];
     // Add AI bids using engine bidding logic
-    const yearsLeft = RanchEngine.YEARS - CUR_YEAR + 1;
+    const yearsLeft = gameYears(world) - CUR_YEAR + 1;
     const aiBids = [];
-    for (const team of TEAMS.filter(t => t.is_ai && t.state)) {
+    for (const team of TEAMS.filter(t => t.is_ai && t.state && !isBusted(t))) {
       const state = reviveState(team.state);
       const arch  = RanchEngine.ARCHETYPES[team.archetype];
       if (!arch || arch.bidCashCap <= 0) continue;
@@ -920,11 +948,15 @@ async function resolveAuction() {
   await logDecision(null, 'phase_advanced', { from: 'auction', to: 'resolve', year: CUR_YEAR });
 
   setPhaseChip('resolve');
-  msg('Year resolved: bids settled and the production year is complete. Review, then advance.', 'ok');
+  msg('Year resolved: bids settled and the production year is complete. Opening next year...', 'ok');
   document.getElementById('btnResolve').disabled = true;
-  document.getElementById('btnNextYear').style.display = '';
-  refreshAuction();
+  await refreshAuction();
   renderLeaderboard();
+
+  // resolve-and-open-next: one click settles the year, publishes the recap (the snapshot
+  // just written by runProductionYear), and opens the next year via the same path the old
+  // manual Advance button used. The Advance button itself stays hidden (no-op fallback).
+  await nextYear();
 }
 
 // Settle accepted co-opetition deals for this year, BEFORE productionYear, so a traded
@@ -939,7 +971,7 @@ async function settleDeals(world) {
   if (!deals || !deals.length) return;
   const w2 = Object.assign({}, world, { year: CUR_YEAR });
   const stateMap = {};
-  (teams || []).forEach(t => { if (t.state) stateMap[t.id] = reviveState(t.state); });
+  (teams || []).forEach(t => { if (t.state && !isBusted(t)) stateMap[t.id] = reviveState(t.state); });
   const touched = new Set();
   for (const d of deals) {
     const proposer = stateMap[d.proposer_team], partner = stateMap[d.partner_team];
@@ -958,8 +990,10 @@ async function settleDeals(world) {
 
 async function runProductionYear(world) {
   const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
+  const results = [];
+  const busts = [];
   for (const team of (teams || [])) {
-    if (!team.state) continue;
+    if (!team.state || isBusted(team)) continue;
     const st = reviveState(team.state);
     const w2 = Object.assign({}, world, { year: CUR_YEAR });
     // Operational decisions (decideYear for AI, board choices for humans) already ran in
@@ -969,7 +1003,93 @@ async function runProductionYear(world) {
     st.peakEquity = Math.max(st.peakEquity || 0, opEq);
     st.maxDrawdown = Math.max(st.maxDrawdown || 0,
       (st.peakEquity - opEq) / Math.max(300000, st.peakEquity));
-    await supa.from('teams').update({ state: JSON.parse(JSON.stringify(st, setReplacer)) }).eq('id', team.id);
+    // bust check (see isBusted note above)
+    st.cashNegYears = st.cash < 0 ? (st.cashNegYears || 0) + 1 : 0;
+    const eqNow = RanchEngine.equity(st, w2);
+    // trigger is EQUITY ONLY (9/07 verify: a big-ranch team that merely held went overdrawn
+    // two years running with +$1.2M equity; the bank carries an overdraft against
+    // collateral, it forecloses when the collateral no longer covers it)
+    if (eqNow < 0) {
+      const activeN = (st.bulls || []).filter(b => !b.inherited && CUR_YEAR - b.boughtYear < 4).length;
+      st.busted = { year: CUR_YEAR, cash: Math.round(st.cash), herd: st.herd, equity: Math.round(eqNow),
+                    reason: eqNow < 0 ? 'equity' : 'cash', bullsToRing: activeN };
+      busts.push({ team, st });
+    }
+    results.push({ id: team.id, st, w2 });
+  }
+  // liquidation: the busted outfit's sale bulls (the ones with a row in the bulls table)
+  // are re-listed for NEXT year's ring; cows and cash go to the bank.
+  for (const b of busts) {
+    try { await liquidateTeam(b.team, b.st, world); }
+    catch (e) { console.warn('liquidation failed for', b.team.name, e); }
+  }
+  // Per-year snapshot for the recap/trajectory sparklines, stored on the team row's own
+  // state blob (no schema migration needed: state is already an arbitrary JSON column).
+  // rank is by cash, the same public score Standings/Leaderboard already default to.
+  const ranked = [...results].sort((a, b) => b.st.cash - a.st.cash);
+  const rankOf = {};
+  ranked.forEach((r, i) => { rankOf[r.id] = i + 1; });
+  for (const r of results) {
+    const util = RanchEngine.utilization(r.st, r.w2);
+    r.st.yearHistory = r.st.yearHistory || [];
+    // world: the closed year's market conditions, kept here because games.world is
+    // overwritten when the next year opens; the board-screen recap reads this so the
+    // "closed at" line describes the year that ended, not the year now opening.
+    r.st.yearHistory.push({
+      year: CUR_YEAR, cash: r.st.cash, herd: r.st.herd,
+      beef: RanchEngine.dollarBeef(r.st.g), exploited: util * 100, rank: rankOf[r.id],
+      world: worldSnap(r.w2),
+    });
+    await supa.from('teams').update({ state: JSON.parse(JSON.stringify(r.st, setReplacer)) }).eq('id', r.id);
+  }
+}
+
+// Re-list a busted team's working sale bulls as liquidation lots in next year's sale
+// (same catalog/truth/tier, reserve unchanged: the bank still wants its money), then
+// strip the outfit: herd, bulls and cash to zero, debt written off. No-op for the
+// bulls if the game is on its last year. Called from runProductionYear.
+async function liquidateTeam(team, st, world) {
+  const nextYr = CUR_YEAR + 1;
+  if (nextYr <= gameYears(world)) {
+    const { data: owned } = await supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('winner_team', team.id);
+    const active = (owned || []).filter(r => CUR_YEAR - r.year < 4);
+    // only bulls the state still carries (a bull traded away or lost is not re-listed)
+    const stillHeld = new Set((st.bulls || []).filter(b => !b.inherited && CUR_YEAR - b.boughtYear < 4).map(b => b.boughtYear + ':' + b.tier));
+    const rows = active.filter(r => stillHeld.has(r.year + ':' + r.tier)).map(r => ({
+      game_id: GAME_ID, year: nextYr, sire: r.sire, tier: r.tier, name: r.name,
+      meta: Object.assign({}, r.meta || {}, { liquidation: { from: team.name, boughtYear: r.year, paid: r.price } }),
+      catalog: r.catalog, truth: r.truth, anchor: r.anchor, reserve: r.reserve,
+      winner_team: null, price: null,
+    }));
+    if (rows.length) await supa.from('bulls').insert(rows);
+    st.busted.bullsToRing = rows.length;
+  }
+  st.herd = 0; st.bulls = []; st.cash = 0; st.debt = 0; st.hands = 0; st.handsPending = 0;
+  st.semen = null; st.tallowContract = false;
+  await logDecision(team.id, 'busted', Object.assign({}, st.busted));
+}
+
+// One-time year-0 baseline snapshot for every team (human or AI) that does not already
+// have one, so the trajectory sparklines start from the post-purchase ranch instead of a
+// single flat point. Rank uses cash, the same public metric the later per-year snapshots
+// and Standings/Leaderboard use.
+async function writeBaselineSnapshots() {
+  const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
+  const revived = (teams || []).filter(t => t.state).map(t => ({ id: t.id, st: reviveState(t.state) }));
+  const missing = revived.filter(x => !(x.st.yearHistory && x.st.yearHistory.length));
+  if (!missing.length) return;
+  const ranked = [...revived].sort((a, b) => b.st.cash - a.st.cash);
+  const rankOf = {};
+  ranked.forEach((r, i) => { rankOf[r.id] = i + 1; });
+  const w0 = RanchEngine.newWorld();
+  for (const x of missing) {
+    let util = 0;
+    try { util = RanchEngine.utilization(x.st, w0); } catch (e) { util = 0; }
+    x.st.yearHistory = [{
+      year: 0, cash: x.st.cash, herd: x.st.herd,
+      beef: RanchEngine.dollarBeef(x.st.g), exploited: util * 100, rank: rankOf[x.id],
+    }];
+    await supa.from('teams').update({ state: JSON.parse(JSON.stringify(x.st, setReplacer)) }).eq('id', x.id);
   }
 }
 
@@ -979,7 +1099,7 @@ async function nextYear() {
   const world = gRow.world;
   CUR_YEAR = gRow.year;
 
-  if (CUR_YEAR >= RanchEngine.YEARS) {
+  if (CUR_YEAR >= gameYears(world)) {
     await supa.from('games').update({ status: 'done', phase: 'ended' }).eq('id', GAME_ID);
     await logDecision(null, 'phase_advanced', { from: 'resolve', to: 'ended' });
     setPhaseChip('ended');
@@ -991,6 +1111,81 @@ async function nextYear() {
   // Open the next year's board meeting (which then leads into the auction)
   document.getElementById('btnNextYear').style.display = 'none';
   await openYear();
+}
+
+// Compact copy of the market fields the Cattlemen's Weekly reads (feeder/drought/shock/tallow).
+function worldSnap(w) {
+  if (!w) return null;
+  return { year: w.year, totalYears: w.totalYears, feederIdx: w.feederIdx, feederHist: (w.feederHist || []).slice(-6),
+           drought: w.drought, droughtHist: (w.droughtHist || []).slice(-6), shock: w.shock,
+           tallowIdx: w.tallowIdx };
+}
+// The closed year's world as snapshotted at resolve, from any team's yearHistory; falls
+// back to the live games.world (the next year's) if no snapshot exists.
+function priorWorldFrom(teams, priorYear, liveWorld) {
+  for (const t of (teams || [])) {
+    const h = t.state && t.state.yearHistory;
+    const e = h && h.find(x => x.year === priorYear && x.world);
+    if (e) return Object.assign({}, liveWorld || {}, e.world);
+  }
+  return liveWorld;
+}
+
+// ---- Cattlemen's Weekly recap (projector view of the year just closed) + Trajectory.
+// Public info only (feeder index, sale gross, outfit herd/rep, cash trend): no secret
+// objective weights, matching the team-page recap's privacy rule. ----
+function adminCattlemensWeekly(w, bulls, teams, nameById, yr) {
+  if (!w) return '';
+  const sold = bulls.filter(b => b.winner_team && b.price);
+  const gross = sold.reduce((s, b) => s + Number(b.price), 0);
+  const top = sold.slice().sort((a, b) => Number(b.price) - Number(a.price))[0];
+  const states = teams.map(t => ({ name: t.name, st: t.state ? reviveState(t.state) : null }))
+    .filter(x => x.st && !(x.st.busted && x.st.busted.year < yr));
+  const bustLine = states.filter(x => x.st.busted && x.st.busted.year === yr).map(x =>
+    `<div style="font-size:0.85rem;color:var(--rust);margin-top:0.4rem"><b>${esc(x.name)}</b> went under this year` +
+    (x.st.busted.bullsToRing ? `; ${x.st.busted.bullsToRing} herd sire${x.st.busted.bullsToRing === 1 ? '' : 's'} go to next year's ring as liquidation lots.` : '.') + `</div>`).join('');
+  const rows = states.filter(x => !x.st.busted).slice().sort((a, b) => b.st.herd - a.st.herd).map(x =>
+    `<tr><td>${esc(x.name)}</td>` +
+    `<td style="font-family:monospace">${x.st.herd.toLocaleString()}</td>` +
+    `<td style="font-family:monospace">${(x.st.bulls || []).filter(b => yr - b.boughtYear < 4).length}</td>` +
+    `<td style="font-family:monospace">${Math.round(x.st.rep || 0)}</td></tr>`).join('');
+  return `<div style="border:1px solid var(--border);border-radius:5px;background:#fff;padding:0.85rem 1rem;margin-bottom:0.9rem">` +
+    `<div style="font-family:Georgia,serif;font-weight:700;font-size:1.02rem;color:var(--rust);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.5rem">` +
+    `The Cattlemen's Weekly <span style="font-family:monospace;font-weight:400;font-size:0.68rem;color:var(--muted);letter-spacing:0.08em">YEAR ${yr} WRAP</span></div>` +
+    `<div style="font-size:0.85rem">Feeder index closed at <b style="font-family:monospace">${(w.feederIdx || 1).toFixed(2)}</b> under ${esc(w.drought)} drought conditions. ` +
+    (sold.length
+      ? `The bull sale grossed <b style="font-family:monospace">$${Math.round(gross).toLocaleString()}</b> on ${sold.length} of ${bulls.length} lots` +
+        (top ? `, topped by ${esc(top.name || top.sire)} at <b style="font-family:monospace">$${Math.round(top.price).toLocaleString()}</b> to ${esc(nameById[top.winner_team] || 'a ranch')}.` : `.`)
+      : `Every lot in the bull sale went home unsold, a no-sale year.`) + `</div>` + bustLine +
+    `<table style="width:100%;margin-top:0.55rem;font-size:0.85rem"><thead><tr><th>Outfit</th><th>Herd</th><th>Herd sires</th><th>Rep</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table></div>`;
+}
+
+// Renders into #adminRecap, at the top of the board card, for the year that just closed.
+// Year 1 has no prior year, so it stays empty then.
+async function renderAdminRecapBlock() {
+  const el = document.getElementById('adminRecap');
+  if (!el) return;
+  if (!GAME_ID || CUR_YEAR <= 1) { el.innerHTML = ''; return; }
+  const priorYear = CUR_YEAR - 1;
+  const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
+  const world = gRow && gRow.world;
+  const [{ data: pBulls }, { data: pTeams }] = await Promise.all([
+    supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', priorYear).order('created_at'),
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+  ]);
+  const nameById = Object.fromEntries((pTeams || []).map(t => [t.id, t.name]));
+  const weekly = adminCattlemensWeekly(priorWorldFrom(pTeams, priorYear, world), pBulls || [], pTeams || [], nameById, priorYear);
+  const allTeamsHist = (pTeams || []).map(t => ({
+    name: t.name, isMe: false,
+    history: t.state ? (reviveState(t.state).yearHistory || []) : [],
+  }));
+  // no single "own" team on the projector: pass null, the trajectory block renders the
+  // rival table only (still cash-only, still public)
+  const traj = window.Recap ? window.Recap.trajectoryBlock(null, allTeamsHist) : '';
+  el.innerHTML = `<details open style="margin-bottom:0.9rem">` +
+    `<summary style="cursor:pointer;font-family:Georgia,serif;font-weight:700;color:var(--rust);padding:0.3rem 0">Cattlemen's Weekly, Year ${priorYear} wrap (projector)</summary>` +
+    weekly + traj + `</details>`;
 }
 
 // ---- Leaderboard ----
@@ -1015,8 +1210,8 @@ async function renderLeaderboard() {
       else if (lb_metric === 'herd') val = st.herd;
       else val = st.rep || 0;
     }
-    return { name: t.name, val, is_ai: t.is_ai };
-  }).sort((a, b) => b.val - a.val);
+    return { name: t.name, val, is_ai: t.is_ai, busted: isBusted(t) ? t.state.busted.year : 0 };
+  }).sort((a, b) => (a.busted ? 1 : 0) - (b.busted ? 1 : 0) || b.val - a.val);
 
   const maxVal = Math.max(...rows.map(r => r.val), 1);
   const tbody = document.getElementById('tbodyLB');
@@ -1029,12 +1224,23 @@ async function renderLeaderboard() {
       : lb_metric === 'rep'
         ? r.val.toFixed(0)
         : '$' + Math.round(r.val).toLocaleString();
-    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.name)}${r.is_ai ? ' <span class="tag tag-ai">AI</span>' : ''}</td>` +
-      `<td>${dispVal}</td><td><span class="lb-bar" style="width:${barW}px"></span></td>`;
+    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.name)}${r.is_ai ? ' <span class="tag tag-ai">AI</span>' : ''}` +
+      (r.busted ? ` <span class="tag tag-autolock">busted yr ${r.busted}</span>` : '') + `</td>` +
+      `<td>${r.busted ? '-' : dispVal}</td><td><span class="lb-bar" style="width:${r.busted ? 2 : barW}px"></span></td>`;
     tbody.appendChild(tr);
   });
   document.getElementById('secLeaderboard').style.display = '';
 }
+
+// ---- Bust-out (Steven 9/07): a team can go under and is then out of the game. Rule:
+// equity below zero at year end (the outfit is worth less than it owes; an overdraft
+// against good collateral is carried, not called). Its working sale bulls
+// go to next year's ring as liquidation lots the other tables can buy; the cows go to the
+// bank. Busted teams are skipped by readiness, auto-lock, AI decisions, AI bids, deals
+// and production, and pinned to the bottom of every standings table. ----
+function isBusted(t) { return !!(t && t.state && t.state.busted); }
+// game length: set at Create Game, carried on games.world; engine default if absent
+function gameYears(world) { return (world && Number(world.totalYears)) || RanchEngine.YEARS; }
 
 // ---- Utilities ----
 function reviveState(st) {
