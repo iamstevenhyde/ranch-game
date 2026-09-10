@@ -208,7 +208,7 @@ function buySemen(r, w, item) {
   const conception = clamp(base + gauss() * SEMEN.conceptionSd, 0.30, 0.92);
   r.semen = { name: item.name, tier: item.tier, traits: item.traits, truth,
               boughtYear: w.year, paid: item.price, conception };
-  r.cash -= item.price;
+  r.cash -= item.price; bookCash(r, 'semen', -item.price);
   return true;
 }
 
@@ -371,7 +371,7 @@ function buyFemales(r, w, tierKey, nLots) {
   if (head <= 0) return 0;
   const gT = femaleTierTraits(tierKey);
   TRAITS.forEach(t => r.g[t] = (r.g[t] * r.herd + gT[t] * head) / (r.herd + head));
-  r.herd += head; r.cash -= head * price;
+  r.herd += head; r.cash -= head * price; bookCash(r, 'cows', -head * price);
   return head;
 }
 
@@ -405,6 +405,7 @@ function executeDeal(proposer, partner, deal, w) {
     bull.covHead = partner.herd * bullCoverage(partner);  // coverage re-anchors to the new owner's herd
     partner.bulls = partner.bulls || []; partner.bulls.push(bull);
     partner.cash -= price; proposer.cash += price;
+    bookCash(partner, 'deals', -price); bookCash(proposer, 'deals', price);
     return { ok: true, note: 'bull + $' + Math.round(price) + ' transferred' };
   }
   if (t === 'semen_split') {
@@ -418,7 +419,7 @@ function executeDeal(proposer, partner, deal, w) {
       const base = SEMEN.conceptionMean + (r.tech.has('genomic') ? SEMEN.genomicConceptionBonus : 0);
       const conception = clamp(base + gauss() * SEMEN.conceptionSd, 0.30, 0.92);
       r.semen = { name: terms.name, tier: terms.tier, traits: terms.traits, truth, boughtYear: w.year, paid: pay, conception };
-      r.cash -= pay; return true;
+      r.cash -= pay; bookCash(r, 'semen', -pay); return true;
     };
     const a = book(proposer, price / 2), b = book(partner, price - price / 2);
     return { ok: a || b, note: 'shared AI straw' };
@@ -427,7 +428,7 @@ function executeDeal(proposer, partner, deal, w) {
     const tech = terms.tech;
     if (!TECHS[tech]) return { ok: false, note: 'unknown tech' };
     const cost = Math.round(TECHS[tech].capex * DEAL.coopCapexMult);
-    const add = r => { if (!r.tech.has(tech) && r.cash >= cost) { r.tech.add(tech); r.cash -= cost; return true; } return false; };
+    const add = r => { if (!r.tech.has(tech) && r.cash >= cost) { r.tech.add(tech); r.cash -= cost; bookCash(r, 'tech', -cost); return true; } return false; };
     const a = add(proposer), b = add(partner);
     return { ok: a || b, note: 'co-funded ' + tech };
   }
@@ -439,6 +440,7 @@ function executeDeal(proposer, partner, deal, w) {
     const head = DEAL.embryoBlendHead;
     TRAITS.forEach(k => { proposer.g[k] = (proposer.g[k] * proposer.herd + partner.g[k] * head) / (proposer.herd + head); });
     proposer.cash -= price; partner.cash += price;
+    bookCash(proposer, 'deals', -price); bookCash(partner, 'deals', price);
     return { ok: true, note: 'embryo share' };
   }
   return { ok: false, note: 'unknown deal type' };
@@ -686,8 +688,24 @@ function makeRanch(key, l) {
     cullFocus: null, cullYears: { fertility: 0, structure: 0, genetics: 0, disposition: 0 },
     peakEquity: 0, maxDrawdown: 0, totalCost: 0, totalLbs: 0, premSum: 0, premN: 0,
     revHist: [], semenRoyalty: 0, lastStmt: null,
+    cashLog: { cows: 0, semen: 0, deals: 0, tech: 0, bulls: 0 },
   };
 }
+// ---------- cash ledger (9/10, item 3) ----------
+// Every cash movement that is NOT the annual operating net (revHist) is booked to a
+// named leg here, so the debrief's cash bridge can be exact instead of dumping cow,
+// semen and deal money into an "unexplained" residual. Bookkeeping only: it never
+// reads back into any economic decision, so the balance gates are untouched.
+// Legs: cows (herd buys/sells), semen (AI program buys), deals (settled team deals),
+// tech (capex, booked here because a co-op deal buys tech at a discount so the final
+// tech set cannot be priced at list), bulls (auction, sim path only -- the multiplayer
+// bridge reads the exact prices off the bulls table).
+// Sign convention: cash OUT is negative, cash IN is positive.
+function bookCash(r, leg, amt) {
+  if (!r.cashLog) r.cashLog = { cows: 0, semen: 0, deals: 0, tech: 0, bulls: 0 };
+  r.cashLog[leg] = (r.cashLog[leg] || 0) + amt;
+}
+
 function equity(r, w) {
   const gAvg = avg(TRAITS.map(t => r.g[t]));
   // better-genetics herds appraise higher (0.7 + g/10*0.6: g5 = 1.0x, g7 = 1.12x)
@@ -1006,7 +1024,7 @@ function decideYear(r, w) {
   }
   if (r.cash < 0) {
     const sell = Math.min(Math.max(0, r.herd - 100), Math.ceil(-r.cash / (1200 * w.feederIdx)));
-    if (sell > 0) { r.herd -= sell; r.cash += sell * 1150 * w.feederIdx; r.rep -= 2; }
+    if (sell > 0) { r.herd -= sell; r.cash += sell * 1150 * w.feederIdx; bookCash(r, 'cows', sell * 1150 * w.feederIdx); r.rep -= 2; }
   }
   if (r.key === 'passive') return;
   // O gate hiring policy: hire ahead of the roster you plan to run active, not after
@@ -1032,10 +1050,10 @@ function decideYear(r, w) {
     const thresh = (r.key === 'family_survival' ? 0.45 : 0.7) * (r.tech.has('water') ? 1.5 : 1.0);
     if (sev > thresh) {
       const sell = Math.round(r.herd * 0.12);
-      r.herd -= sell; r.cash += sell * 1500 * w.feederIdx; // early sellers beat the liquidation crowd
+      r.herd -= sell; r.cash += sell * 1500 * w.feederIdx; bookCash(r, 'cows', sell * 1500 * w.feederIdx); // early sellers beat the liquidation crowd
     } else if (sev === 0 && r.herd < r.herd0 && r.cash > 120000) {
       const buy = Math.min(r.herd0 - r.herd, Math.floor((r.cash * 0.3) / (1750 * w.feederIdx)));
-      if (buy > 0) { r.herd += buy; r.cash -= buy * 1750 * w.feederIdx; }
+      if (buy > 0) { r.herd += buy; r.cash -= buy * 1750 * w.feederIdx; bookCash(r, 'cows', -buy * 1750 * w.feederIdx); }
     }
   }
   // expansion
@@ -1052,7 +1070,7 @@ function decideYear(r, w) {
     }
     // management absorption: a crew can only integrate ~35% more cows a year
     const buy = Math.min(Math.floor(budget / cowPrice), r.landCap - r.herd, Math.round(r.herd * 0.35));
-    if (buy > 0) { r.herd += buy; r.cash -= buy * cowPrice; }
+    if (buy > 0) { r.herd += buy; r.cash -= buy * cowPrice; bookCash(r, 'cows', -buy * cowPrice); }
   }
   // (cow market removed 7/09, Steven: only the herd lever. AIs no longer buy replacement
   // females; genetics archetypes build the herd through hard culling plus bulls and semen.)
@@ -1091,7 +1109,7 @@ function decideYear(r, w) {
     const fit = REGIONS[r.region].tech[t];
     const scaleOk = t === 'vfence' ? r.herd >= 250 : t === 'genomic' ? r.herd >= 300 : true;
     if (r.cash > TECHS[t].capex + 50000 && scaleOk && a.techRule(fit, t)) {
-      r.tech.add(t); r.cash -= TECHS[t].capex;
+      r.tech.add(t); r.cash -= TECHS[t].capex; bookCash(r, 'tech', -TECHS[t].capex);
       break;
     }
   }
@@ -1127,7 +1145,7 @@ function auctionYear(ranches, w, ledger) {
     // could the true-best buyer have taken this bull? Losing on budget scarcity or a
     // full roster is a rational allocation, not noise-driven misallocation
     const affordable = bestTrueOpen && bestTrue.cash * bestTrue.a.bidCashCap >= bestBid;
-    best.cash -= bestBid;
+    best.cash -= bestBid; bookCash(best, 'bulls', -bestBid);
     // ledger bookkeeping: a bull covers a fixed head count (covHead) no matter how the
     // herd grows later, and a premium marketer's pedigree asset is real brand value
     // (it monetizes through reputation), so the realized side must count both
@@ -1270,6 +1288,7 @@ if (typeof window !== 'undefined') {
     CULL_FOCUS,
     CULL_FOCUS_AI,
     cullFocus,
+    bookCash,
     FEMALE_TIERS,
     makeFemaleBoard,
     buyFemales,
@@ -1347,6 +1366,7 @@ if (typeof window !== 'undefined') {
     CULL_FOCUS,
     CULL_FOCUS_AI,
     cullFocus,
+    bookCash,
     FEMALE_TIERS,
     makeFemaleBoard,
     buyFemales,

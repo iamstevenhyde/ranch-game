@@ -61,6 +61,25 @@
   .clock-display.clock-warn { color: var(--rust); }
   .clock-display.clock-expired { color: #c81e1e; }
   input[type=number].minutes-input { width: 5rem; padding: 0.35rem 0.5rem; font-family: inherit; font-size: 0.9rem; border: 1px solid var(--border); border-radius: 4px; }
+  /* ---- Debrief (projector, item 3, 9/10) ---- */
+  #secDebrief main, #secDebrief { max-width: none; }
+  .debrief-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1.4rem 1.6rem; margin-bottom: 1.6rem; }
+  .debrief-title { font-size: 1.15rem; font-weight: bold; color: var(--rust); margin-bottom: 0.3rem; }
+  .debrief-note { font-size: 0.9rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.4; }
+  table.debrief-table { width: 100%; border-collapse: collapse; font-size: 1.05rem; }
+  table.debrief-table th { background: var(--dusk); color: var(--tan); text-align: right; padding: 0.5rem 0.8rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  table.debrief-table th:first-child, table.debrief-table td:first-child { text-align: left; }
+  table.debrief-table td { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); text-align: right; font-family: monospace; font-size: 1.05rem; }
+  table.debrief-table tr.debrief-rank1 td { background: #fef3c7; font-weight: bold; }
+  table.debrief-table tr.debrief-busted td { color: var(--muted); font-style: italic; }
+  .ratio-flag { color: #fff; background: var(--rust); border-radius: 3px; padding: 0.1rem 0.5rem; font-weight: bold; }
+  .ratio-ok { color: var(--sage); font-weight: bold; }
+  .bridge-resid { color: var(--rust); font-weight: bold; }
+  .bridge-resid.zero { color: var(--sage); font-weight: normal; }
+  .bridge-resid.big { color: #fff; background: var(--rust); padding: 0.15rem 0.4rem; border-radius: 3px; }
+  .cf-worse { color: var(--rust); font-weight: bold; }
+  .cf-better { color: var(--sage); font-weight: bold; }
+  .debrief-team-name { font-size: 1.1rem; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -190,13 +209,70 @@
       </table>
     </div>
   </section>
+
+  <!-- Debrief (projector, end of game): item 3, 9/10. "The table that did the least won." -->
+  <section id="secDebrief" style="display:none">
+    <h2>End-of-Game Debrief</h2>
+    <div class="debrief-note" style="font-size:1rem;margin-bottom:1.2rem">Row order below comes from
+      <code>RanchEngine.scoreGame()</code>, the live engine's own KPI scorecard: each team's final state weighed
+      against <em>its own archetype's weights</em>, computed fresh from this game's data -- not raw dollars. A team
+      can protect the most equity and still score low, or lose equity and score first, because the scorecard rewards
+      the archetype's own objective, not survival of the balance sheet. <strong>Resolved 9/10:</strong> the 2026-09-08
+      class report's own "Rank" column, despite its text calling rank "the game's own scorecard... not the same thing
+      as raw dollars," is in fact a plain ending-cash sort -- verified exactly against the live game for all 8 teams.
+      The Equity panel below shows both orderings side by side (scorecard rank, cash rank in parentheses where they
+      differ) so that gap is visible on the projector, not just asserted: on 9/08, Railli's Rough Riders finished
+      LAST on cash but FIRST on its own archetype's scorecard (rapid_expansion weights herd growth 60%, and their
+      herd went 1,276 to 1,981), while The Mad Cows! finished first on cash but fourth on the scorecard.</div>
+
+    <div class="debrief-card">
+      <div class="debrief-title">1. Bid-to-Anchor: two different questions, two different answers</div>
+      <div class="debrief-note">Anchor is the bull's modeled fair value; 1.0x is a fair-value bid. These are two
+        separate statistics that can point opposite directions -- a team can look disciplined on one and reckless on
+        the other. <strong>Median, bids placed</strong> is across every bid a team submitted, won or lost.
+        <strong>Average, bulls won</strong> is only the lots a team actually took home (the class report's own
+        "price / anchor" measure). The gap between them <em>is</em> the winner's curse: a team wins precisely the
+        lots it most overvalued, so its won-lot average runs hotter than its placed-bid median. Lot and bid counts
+        below are read off this game's own tables, not asserted.</div>
+      <div id="debriefBidTable"></div>
+    </div>
+
+    <div class="debrief-card">
+      <div class="debrief-title">2. Cash Bridge: where the money went</div>
+      <div class="debrief-note">Starting cash is after the ranch purchase. Operating net covers calf and bull-sale
+        revenue less feed, labor, payroll, interest and overhead. Components that cannot be reconstructed from the
+        game log fall into "Other / unexplained" rather than being forced to balance. Cows, semen and deals come
+        from the cash ledger the engine now keeps (shipped 2026-09-10); in a game played before that, those three
+        columns read n/a and their dollars stay in Other. This bridge is computed from engine state, not from any
+        report figure.</div>
+      <div id="debriefBridgeTable"></div>
+    </div>
+
+    <div class="debrief-card">
+      <div class="debrief-title">2b. Equity Bridge: the outcome the class report actually publishes</div>
+      <div class="debrief-note">Equity = cash minus debt plus herd value at the final year's feeder index, the game's
+        own formula and the only outcome measure the class report states (there is no ending-cash figure in the
+        report or the CSV). Where a number here can be checked against the report, it is checked on equity, not cash.</div>
+      <div id="debriefEquityTable"></div>
+    </div>
+
+    <div class="debrief-card">
+      <div class="debrief-title">3. Default-Board Counterfactual: what if the team had done nothing?</div>
+      <div class="debrief-note">Held fixed: the team's own ranch and region, the actual world and drought/shock path
+        each year, and the team's actual auction purchases (same bulls, same prices). Operations are replaced with
+        the engine default every year: hold herd, no tech, no AI-semen program, no hires, no debt change, and a
+        default cull. Starting genetics are re-drawn (the actual starting genetics roll was never logged), so this
+        is an approximation, not an audited replay.</div>
+      <div id="debriefCfTable"></div>
+    </div>
+  </section>
 </main>
 
 <!-- supabase-js v2 UMD from jsdelivr, pinned -->
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=1701580de8"></script>
+<script src="engine.js?v=618994bff3"></script>
 <script src="recap.js?v=67b2825eaf"></script>
 <script>
 'use strict';
@@ -238,7 +314,7 @@ function setPhaseChip(phase) {
   document.getElementById('phaseChip').textContent = phase;
 }
 function showSection(id) {
-  ['secCreate','secLobby','secMarket','secBoard','secAuction','secLeaderboard'].forEach(s => {
+  ['secCreate','secLobby','secMarket','secBoard','secAuction','secLeaderboard','secDebrief'].forEach(s => {
     document.getElementById(s).style.display = (s === id || id === null) ? '' : 'none';
   });
 }
@@ -308,6 +384,11 @@ async function resumeGame() {
     document.getElementById('btnNextYear').style.display = '';
     await refreshBoard();
     await refreshAuction();
+  } else if (g.phase === 'ended') {
+    showSection('secLeaderboard');
+    document.getElementById('secDebrief').style.display = '';
+    renderLeaderboard();
+    await renderDebrief();
   } else {
     showSection('secLobby');
   }
@@ -898,6 +979,19 @@ async function resolveAuction() {
   ]);
   TEAMS = teams || [];
 
+  // Poll-proof, per-resolve view of every team's state. Two things made reading
+  // team.state off TEAMS inside the bull loop below unsafe, and both bit the 9/08 class
+  // game: (a) a team can win more than one lot in a year, and the winner's state was
+  // revived from the array, mutated, written back, and the array copy left stale, so the
+  // NEXT win in the same year was built on a snapshot with neither the earlier charge nor
+  // the earlier bull, and overwrote it; (b) the admin page's poll reassigns TEAMS on its
+  // own timer, so whether an earlier charge survived depended on where that poll landed.
+  // Evidence: on 9/08 the Ranch Club won 8 lots but its state held 6 bulls, Railli's 5
+  // vs 4, Harriet's 4 vs 3, Buster's 2 vs 1. Mutating this map in place and writing from
+  // it makes the loop deterministic and independent of the poll.
+  const stateById = {};
+  for (const t of TEAMS) if (t.state) stateById[t.id] = reviveState(t.state);
+
   const bullById = Object.fromEntries((bulls || []).map(b => [b.id, b]));
   const bidsByBull = {};
   (bids || []).forEach(bid => {
@@ -911,7 +1005,8 @@ async function resolveAuction() {
     const yearsLeft = gameYears(world) - CUR_YEAR + 1;
     const aiBids = [];
     for (const team of TEAMS.filter(t => t.is_ai && t.state && !isBusted(t))) {
-      const state = reviveState(team.state);
+      const state = stateById[team.id];
+      if (!state) continue;
       const arch  = RanchEngine.ARCHETYPES[team.archetype];
       if (!arch || arch.bidCashCap <= 0) continue;
       const activeN = (state.bulls || []).filter(b => !b.inherited && CUR_YEAR - b.boughtYear < 4).length;
@@ -939,13 +1034,15 @@ async function resolveAuction() {
 
     // Deduct from winner's state cash
     const winTeam = TEAMS.find(t => t.id === winner.team_id);
-    if (winTeam && winTeam.state) {
-      const st = reviveState(winTeam.state);
+    const st = stateById[winner.team_id];
+    if (winTeam && st) {
       st.cash -= winner.amount;
       st.bulls = st.bulls || [];
       st.bulls.push({ truth: bull.truth, tier: bull.tier, boughtYear: CUR_YEAR,
                       paid: winner.amount, covHead: st.herd * RanchEngine.bullCoverage(st), realized: 0 });
-      await supa.from('teams').update({ state: JSON.parse(JSON.stringify(st, setReplacer)) }).eq('id', winner.team_id);
+      const written = JSON.parse(JSON.stringify(st, setReplacer));
+      await supa.from('teams').update({ state: written }).eq('id', winner.team_id);
+      winTeam.state = written; // keep the array row current too, in case anything else reads it
       await logDecision(winner.team_id, 'auction_resolved', {
         bull_id: bull.id, price: winner.amount, tier: bull.tier, year: CUR_YEAR
       });
@@ -1115,8 +1212,11 @@ async function nextYear() {
     await supa.from('games').update({ status: 'done', phase: 'ended' }).eq('id', GAME_ID);
     await logDecision(null, 'phase_advanced', { from: 'resolve', to: 'ended' });
     setPhaseChip('ended');
-    msg('Game over! Final leaderboard shown.', 'ok');
+    msg('Game over! Final leaderboard and debrief shown.', 'ok');
+    showSection('secLeaderboard');
+    document.getElementById('secDebrief').style.display = '';
     renderLeaderboard();
+    await renderDebrief();
     return;
   }
 
@@ -1242,6 +1342,363 @@ async function renderLeaderboard() {
     tbody.appendChild(tr);
   });
   document.getElementById('secLeaderboard').style.display = '';
+}
+
+// ==========================================================================
+// ---- Debrief (item 3, 9/10): end-of-game projector screen. NO ENGINE CHANGE --
+// every number below is read out of the games/teams/ranches/bulls/bids tables
+// and RanchEngine's exported functions, the same tables the rest of admin.html
+// already reads. See supabase/_debrief_verify_20260910.py for the reconciliation
+// proof against the 9/08 live class data.
+// ==========================================================================
+
+// Pull everything the debrief needs in one pass.
+async function fetchDebriefData() {
+  const [{ data: teams }, { data: ranchesAll }, { data: bulls }] = await Promise.all([
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+    supa.from('ranches').select('*').eq('game_id', GAME_ID),
+    supa.from('bulls').select('*').eq('game_id', GAME_ID).order('year'),
+  ]);
+  const bullIds = (bulls || []).map(b => b.id);
+  let bids = [];
+  if (bullIds.length) {
+    const { data } = await supa.from('bids').select('*').in('bull_id', bullIds);
+    bids = data || [];
+  }
+  return { teams: teams || [], ranchesAll: ranchesAll || [], bulls: bulls || [], bids };
+}
+
+// ---- 1. Bid-to-anchor ----
+// Ratio = bid amount / the bull's modeled fair value (anchor). Two DIFFERENT statistics,
+// per Steven's 9/10 correction -- do not collapse them into one number:
+//   - "bids placed" median: across EVERY bid a team submitted, won or lost.
+//   - "bulls won" average: across only the lots a team actually took home, the same
+//     measure the class report's own "price / anchor" table uses (average, not median).
+// The gap between them is the winner's curse itself: a team wins precisely the lots it
+// most overvalued, so its won-lot average runs hotter than its placed-bid median.
+function teamBidRatios(teamId, bulls, bids) {
+  const bullById = Object.fromEntries(bulls.map(b => [b.id, b]));
+  const mine = bids.filter(b => b.team_id === teamId);
+  const byYear = {};
+  const all = [];
+  mine.forEach(b => {
+    const bull = bullById[b.bull_id];
+    if (!bull) return;
+    const ratio = Number(b.amount) / Number(bull.anchor);
+    all.push(ratio);
+    (byYear[bull.year] = byYear[bull.year] || []).push(ratio);
+  });
+  const wonBulls = bulls.filter(b => b.winner_team === teamId && b.price != null);
+  const winRatios = wonBulls.map(b => Number(b.price) / Number(b.anchor));
+  const avgWinRatio = winRatios.length ? winRatios.reduce((s, x) => s + x, 0) / winRatios.length : null;
+  return {
+    bidsCount: mine.length,
+    placedMedian: all.length ? RanchEngine.median(all) : null,
+    perYear: Object.fromEntries(Object.entries(byYear).map(([y, r]) => [y, RanchEngine.median(r)])),
+    bullsWon: winRatios.length,
+    avgWinRatio,
+    winningAboveFair: winRatios.filter(r => r > 1).length,
+    maxWinRatio: winRatios.length ? Math.max(...winRatios) : null,
+    curseGap: (avgWinRatio != null && all.length) ? avgWinRatio - RanchEngine.median(all) : null,
+  };
+}
+
+function renderBidTable(teams, bulls, bids, rankOf) {
+  const rows = teams.filter(t => !t.is_ai).map(t => {
+    const r = teamBidRatios(t.id, bulls, bids);
+    return { t, r };
+  }).sort((a, b) => (rankOf[a.t.id] || 99) - (rankOf[b.t.id] || 99));
+  const trs = rows.map(({ t, r }) => {
+    const placedTxt = r.placedMedian != null ? r.placedMedian.toFixed(1) + 'x' : '-';
+    const wonTxt = r.avgWinRatio != null ? r.avgWinRatio.toFixed(1) + 'x' : '-';
+    const gapTxt = r.curseGap != null ? (r.curseGap >= 0 ? '+' : '') + r.curseGap.toFixed(1) + 'x' : '-';
+    const flagClass = r.winningAboveFair > 0 ? 'ratio-flag' : 'ratio-ok';
+    const flagText = r.bullsWon ? r.winningAboveFair + ' / ' + r.bullsWon : '0 / 0';
+    const perYearTxt = Object.entries(r.perYear).sort((a, b) => Number(a[0]) - Number(b[0]))
+      .map(([y, v]) => 'Y' + y + ': ' + v.toFixed(1) + 'x').join('&nbsp;&nbsp;');
+    return `<tr class="${rankOf[t.id] === 1 ? 'debrief-rank1' : ''}">` +
+      `<td class="debrief-team-name">${esc(t.name)}</td>` +
+      `<td>${r.bidsCount}</td>` +
+      `<td>${placedTxt}</td>` +
+      `<td>${r.bullsWon}</td>` +
+      `<td>${wonTxt}</td>` +
+      `<td>${gapTxt}</td>` +
+      `<td>${r.maxWinRatio != null ? r.maxWinRatio.toFixed(1) + 'x' : '-'}</td>` +
+      `<td><span class="${flagClass}">${flagText}</span></td>` +
+      `<td style="text-align:left;font-size:0.85rem">${perYearTxt || '-'}</td></tr>`;
+  }).join('');
+  document.getElementById('debriefBidTable').innerHTML =
+    `<table class="debrief-table"><thead><tr><th>Team</th><th>Bids placed</th>` +
+    `<th>Median ratio (bids placed)</th><th>Bulls won</th><th>Avg ratio (bulls won)</th>` +
+    `<th>Winner's-curse gap</th><th>Worst winning bid</th><th>Winning bids over fair</th>` +
+    `<th style="text-align:left">By year (bids placed)</th></tr></thead>` +
+    `<tbody>${trs}</tbody></table>`;
+}
+
+// ---- 2. Cash bridge ----
+// Every dollar we can attribute exactly: starting cash (post ranch-purchase), the sum of
+// each year's operating net (revHist, already net of feed/labor/payroll/interest/overhead),
+// bull purchases (bulls table, exact), tech capex (final tech set x TECHS capex, exact
+// because tech is only ever added, never dropped), and the net cash effect of debt (every
+// borrow/paydown moves cash and debt by the same amount, so final debt = total cash effect).
+// What is left (AI-semen program buys, cow-board buys, settled team deals -- none of which
+// keep a historical $ log) becomes an explicit "Other / unexplained" line instead of being
+// forced to zero.
+function teamCashBridge(team, bulls) {
+  const st = reviveState(team.state);
+  if (!st) return null;
+  const startCash = st.cash0 != null ? st.cash0 : RanchEngine.START_CASH;
+  const opNet = (st.revHist || []).reduce((s, x) => s + x, 0);
+  const bullsSpend = bulls.filter(b => b.winner_team === team.id && b.price != null)
+    .reduce((s, b) => s + Number(b.price), 0);
+  // The cash ledger (model-sim.js bookCash) carries the legs that keep no other history:
+  // cows, semen programs and settled deals. Games played before 2026-09-10 have no ledger,
+  // so those dollars stay in the residual and the row is marked as a legacy estimate
+  // rather than being back-filled from the decision log -- the board clamps herd purchases
+  // to land, absorption and cash, so the logged REQUEST is not what was actually bought.
+  const log = st.cashLog || null;
+  const cowNet = log ? (log.cows || 0) : null;
+  const semenSpend = log ? (log.semen || 0) : null;
+  const dealCash = log ? (log.deals || 0) : null;
+  // tech comes from the ledger when it exists, because a co-op deal buys tech at
+  // DEAL.coopCapexMult and the final tech set cannot be priced at list.
+  const techSpend = (log && log.tech) ? -log.tech
+    : [...(st.tech || [])].reduce((s, t) => s + ((RanchEngine.TECHS[t] || {}).capex || 0), 0);
+  const debtEffect = st.debt || 0; // makeRanch starts every ranch at debt 0, so final debt is the net cash effect
+  const endCash = st.cash;
+  const explained = startCash + opNet - bullsSpend - techSpend + debtEffect
+                  + (cowNet || 0) + (semenSpend || 0) + (dealCash || 0);
+  const residual = endCash - explained;
+  const grossMovement = Math.abs(opNet) + bullsSpend + techSpend + Math.abs(debtEffect)
+                      + Math.abs(cowNet || 0) + Math.abs(semenSpend || 0) + Math.abs(dealCash || 0);
+  return { busted: isBusted(team), bustedYear: isBusted(team) ? st.busted.year : null,
+    startCash, opNet, bullsSpend, techSpend, debtEffect, cowNet, semenSpend, dealCash,
+    legacy: !log, residual, grossMovement,
+    residualPct: grossMovement > 0 ? Math.abs(residual) / grossMovement * 100 : 0, endCash };
+}
+
+function renderBridgeTable(teams, bulls, rankOf) {
+  const dollars = v => '$' + Math.round(v).toLocaleString();
+  const rows = teams.filter(t => !t.is_ai).map(t => ({ t, b: teamCashBridge(t, bulls) }))
+    .filter(x => x.b)
+    .sort((a, b) => (rankOf[a.t.id] || 99) - (rankOf[b.t.id] || 99));
+  const trs = rows.map(({ t, b }) => {
+    if (b.busted) {
+      return `<tr class="debrief-busted"><td class="debrief-team-name">${esc(t.name)}</td>` +
+        `<td colspan="9">Busted in Year ${b.bustedYear}: herd, bulls and cash liquidated to the bank. ` +
+        `Cash bridge is not meaningful after liquidation.</td></tr>`;
+    }
+    // a residual under $1k is rounding; over 5% of gross movement it is a missing leg
+    const residClass = Math.abs(b.residual) < 1000 ? 'bridge-resid zero'
+      : (b.residualPct > 5 ? 'bridge-resid big' : 'bridge-resid');
+    const leg = v => v == null ? '<span style="color:var(--muted)">n/a</span>'
+      : (v === 0 ? '$0' : (v < 0 ? '-' + dollars(-v) : '+' + dollars(v)));
+    return `<tr class="${rankOf[t.id] === 1 ? 'debrief-rank1' : ''}">` +
+      `<td class="debrief-team-name">${esc(t.name)}` +
+      (b.legacy ? ` <span style="color:var(--muted);font-size:0.75rem">(pre-ledger game)</span>` : '') + `</td>` +
+      `<td>${dollars(b.startCash)}</td>` +
+      `<td>${dollars(b.opNet)}</td>` +
+      `<td>-${dollars(b.bullsSpend)}</td>` +
+      `<td>-${dollars(b.techSpend)}</td>` +
+      `<td>${leg(b.cowNet)}</td>` +
+      `<td>${leg(b.semenSpend)}</td>` +
+      `<td>${leg(b.dealCash)}</td>` +
+      `<td>+${dollars(b.debtEffect)}</td>` +
+      `<td class="${residClass}">${dollars(b.residual)}</td>` +
+      `<td>${dollars(b.endCash)}</td></tr>`;
+  }).join('');
+  const anyLegacy = rows.some(x => x.b && x.b.legacy);
+  document.getElementById('debriefBridgeTable').innerHTML =
+    `<table class="debrief-table"><thead><tr><th>Team</th><th>Starting cash</th><th>Operating net</th>` +
+    `<th>Bulls bought</th><th>Tech</th><th>Cows</th><th>Semen</th><th>Deals</th><th>Debt</th>` +
+    `<th>Other / unexplained</th><th>Ending cash</th></tr></thead>` +
+    `<tbody>${trs}</tbody></table>` +
+    (anyLegacy ? `<div class="debrief-note" style="margin-top:0.8rem">Rows marked ` +
+      `<i>pre-ledger game</i> were played before the cash ledger shipped (2026-09-10). Their cow, ` +
+      `semen and deal money has no stored record, so it sits in Other / unexplained. Those three ` +
+      `columns read n/a rather than being estimated from the decision log, because the board clamps ` +
+      `a herd purchase to land, absorption and cash and the logged request is not what was bought.</div>` : '');
+}
+
+// ---- 2b. Equity bridge ----
+// Equity = cash - debt + herd value at the given world's feeder index (RanchEngine.equity,
+// the engine's own formula and the ONLY outcome measure the class report actually
+// publishes -- there is no ending-cash figure in the report or the CSV, per Steven's
+// 9/10 correction). st.eq0 is captured at ranch purchase (see makeRanch/assignRanches);
+// ending equity uses the FINAL year's world (games.world), matching the report's own
+// "equity at the year-5 feeder index" language.
+function teamEquityBridge(team, finalWorld) {
+  const st = reviveState(team.state);
+  if (!st || !finalWorld) return null;
+  const startEq = st.eq0 != null ? st.eq0 : null;
+  const endEq = RanchEngine.equity(st, finalWorld);
+  const dollarChange = startEq != null ? endEq - startEq : null;
+  const pctChange = (startEq != null && startEq !== 0) ? dollarChange / startEq * 100 : null;
+  return { busted: isBusted(team), bustedYear: isBusted(team) ? st.busted.year : null,
+    startEq, endEq, dollarChange, pctChange };
+}
+
+function renderEquityTable(teams, finalWorld, rankOf, cashRankOf) {
+  const dollars = v => '$' + Math.round(v).toLocaleString();
+  const rows = teams.filter(t => !t.is_ai).map(t => ({ t, e: teamEquityBridge(t, finalWorld) }))
+    .filter(x => x.e)
+    .sort((a, b) => (rankOf[a.t.id] || 99) - (rankOf[b.t.id] || 99));
+  const trs = rows.map(({ t, e }) => {
+    const scoreR = rankOf[t.id], cashR = cashRankOf[t.id];
+    const gapNote = (scoreR != null && cashR != null && scoreR !== cashR)
+      ? ` <span style="color:var(--muted);font-size:0.8rem">(cash ${cashR})</span>` : '';
+    if (e.startEq == null) {
+      return `<tr><td class="debrief-team-name">${esc(t.name)}</td>` +
+        `<td colspan="4">No starting-equity snapshot on record for this team.</td></tr>`;
+    }
+    const changeClass = e.dollarChange < 0 ? 'cf-worse' : 'cf-better';
+    const pctTxt = e.pctChange != null ? e.pctChange.toFixed(1) + '%' : '-';
+    return `<tr class="${rankOf[t.id] === 1 ? 'debrief-rank1' : ''}">` +
+      `<td class="debrief-team-name">${esc(t.name)}${e.busted ? ' (busted yr ' + e.bustedYear + ')' : ''}</td>` +
+      `<td>${scoreR != null ? scoreR : '-'}${gapNote}</td>` +
+      `<td>${dollars(e.startEq)}</td>` +
+      `<td>${dollars(e.endEq)}</td>` +
+      `<td class="${changeClass}">${e.dollarChange >= 0 ? '+' : ''}${dollars(e.dollarChange)} (${pctTxt})</td></tr>`;
+  }).join('');
+  document.getElementById('debriefEquityTable').innerHTML =
+    `<table class="debrief-table"><thead><tr><th>Team</th><th>Scorecard rank (cash rank)</th>` +
+    `<th>Starting equity</th><th>Ending equity</th><th>Equity change</th></tr></thead>` +
+    `<tbody>${trs}</tbody></table>`;
+}
+
+// ---- 3. Default-board counterfactual ----
+// Approximate wage-inflation replay: engine.js's WAGE_DRIFT is not exported, so this
+// mirrors it (3.6%/yr normal, ~9.5%/yr in a severe-drought year, engine.js's own midpoint
+// of its 8-11% random draw) rather than reading it off the live model. Display-only; does
+// not change engine.js or model-sim.js.
+const DEBRIEF_WAGE_DRIFT = 0.036;
+const DEBRIEF_WAGE_DRIFT_SEVERE = 0.095;
+
+async function computeCounterfactual(team, ranchesAll, bulls) {
+  const listing = ranchesAll.find(r => r.bought_by === team.id);
+  const st = reviveState(team.state);
+  if (!listing || !st) return null;
+  const base = RanchEngine.makeRanch(team.archetype,
+    { county: listing.county, region: listing.region, herd: listing.herd, landCap: listing.land_cap, ask: listing.ask });
+  const w0 = RanchEngine.newWorld();
+  base.cash0 = base.cash;
+  base.eq0 = RanchEngine.equity(base, w0);
+  base.peakEquity = base.eq0 - base.cash0;
+
+  const hist = st.yearHistory || [];
+  const totalYears = hist.length ? Math.max(...hist.map(h => h.year)) : 0;
+  let wageRatchet = 1.0;
+  for (let y = 1; y <= totalYears; y++) {
+    const snap = hist.find(h => h.year === y);
+    const w = Object.assign({}, w0, snap && snap.world ? snap.world : {}, { year: y });
+    wageRatchet *= (w.drought === 'severe' ? (1 + DEBRIEF_WAGE_DRIFT_SEVERE) : (1 + DEBRIEF_WAGE_DRIFT));
+    w.wageRatchet = wageRatchet;
+    // same auction outcomes as actually happened: the team's real purchases this year,
+    // at the real price, land on the counterfactual roster unchanged.
+    bulls.filter(b => b.winner_team === team.id && b.year === y).forEach(b => {
+      base.cash -= Number(b.price);
+      base.bulls.push({ truth: b.truth, tier: b.tier, boughtYear: y, paid: Number(b.price),
+        covHead: base.herd * RanchEngine.bullCoverage(base), realized: 0 });
+    });
+    // default board: no cow buys, no tech, hold herd, default cull, no hires, no debt change
+    // -- i.e. nothing between the forced auction result above and productionYear below.
+    RanchEngine.productionYear(base, w);
+  }
+  return { endCash: base.cash, herd: base.herd, years: totalYears };
+}
+
+function renderCfTable(teams, ranchesAll, bulls, rankOf, cfByTeam) {
+  const dollars = v => '$' + Math.round(v).toLocaleString();
+  const rows = teams.filter(t => !t.is_ai).map(t => ({ t, cf: cfByTeam[t.id] }))
+    .filter(x => x.cf)
+    .sort((a, b) => (rankOf[a.t.id] || 99) - (rankOf[b.t.id] || 99));
+  const trs = rows.map(({ t, cf }) => {
+    const st = reviveState(t.state);
+    const actualCash = isBusted(t) ? 0 : (st ? st.cash : 0);
+    const delta = actualCash - cf.endCash;
+    const deltaClass = delta < 0 ? 'cf-worse' : 'cf-better';
+    const deltaTxt = (delta >= 0 ? '+' : '-') + dollars(Math.abs(delta));
+    return `<tr class="${rankOf[t.id] === 1 ? 'debrief-rank1' : ''}">` +
+      `<td class="debrief-team-name">${esc(t.name)}${isBusted(t) ? ' (busted)' : ''}</td>` +
+      `<td>${dollars(actualCash)}</td>` +
+      `<td>${dollars(cf.endCash)}</td>` +
+      `<td class="${deltaClass}">${deltaTxt}</td></tr>`;
+  }).join('');
+  document.getElementById('debriefCfTable').innerHTML =
+    `<table class="debrief-table"><thead><tr><th>Team</th><th>Actual ending cash</th>` +
+    `<th>Default-board ending cash</th><th>Actual minus default</th></tr></thead>` +
+    `<tbody>${trs}</tbody></table>`;
+}
+
+// True game rank: RanchEngine.scoreGame weighs each team's final KPI mix against its OWN
+// archetype's weights (the same rule the class report ranks by -- rank 1 is not "most
+// cash", see the 9/10 framing note above the debrief). Falls back to a cash sort if the
+// score cannot be computed (e.g. no world snapshot on record) so the screen still renders.
+function computeTrueRank(teams, finalWorld) {
+  const scoreable = teams.filter(t => t.state && !isBusted(t));
+  const rankOf = {};
+  if (finalWorld && scoreable.length) {
+    try {
+      const ranches = scoreable.map(t => reviveState(t.state));
+      const scores = RanchEngine.scoreGame(ranches, finalWorld);
+      const withScore = scoreable.map((t, i) => ({ t, score: scores[i] }))
+        .sort((a, b) => b.score - a.score);
+      withScore.forEach((x, i) => { rankOf[x.t.id] = i + 1; });
+    } catch (e) {
+      console.warn('scoreGame failed, falling back to a cash sort for the debrief order', e);
+    }
+  }
+  // anything not scored (busted, or scoreGame unavailable) sorts after, by cash, worst last
+  const remaining = teams.filter(t => rankOf[t.id] === undefined)
+    .sort((a, b) => {
+      const aBust = isBusted(a) ? 1 : 0, bBust = isBusted(b) ? 1 : 0;
+      if (aBust !== bBust) return aBust - bBust;
+      const av = a.state ? reviveState(a.state).cash : 0, bv = b.state ? reviveState(b.state).cash : 0;
+      return bv - av;
+    });
+  let next = Object.keys(rankOf).length + 1;
+  remaining.forEach(t => { rankOf[t.id] = next++; });
+  return rankOf;
+}
+
+// Cash rank: a plain descending sort on ending cash, busted teams last. Verified 9/10:
+// this is what the 2026-09-08 class report's own "Rank" column actually is, for all 8
+// teams exactly, even though the report's own text describes rank as the archetype
+// scorecard. Shown alongside the scorecard rank (computeTrueRank) so the gap between
+// "what the room watched all night" (cash) and "what the archetypes are scored on" is
+// visible on screen instead of asserted in prose.
+function computeCashRank(teams) {
+  const ranked = [...teams].sort((a, b) => {
+    const aBust = isBusted(a) ? 1 : 0, bBust = isBusted(b) ? 1 : 0;
+    if (aBust !== bBust) return aBust - bBust;
+    const av = a.state ? reviveState(a.state).cash : 0, bv = b.state ? reviveState(b.state).cash : 0;
+    return bv - av;
+  });
+  const rankOf = {};
+  ranked.forEach((t, i) => { rankOf[t.id] = i + 1; });
+  return rankOf;
+}
+
+async function renderDebrief() {
+  if (!GAME_ID) return;
+  const { teams, ranchesAll, bulls, bids } = await fetchDebriefData();
+  const humanTeams = teams.filter(t => !t.is_ai);
+  const { data: gRow } = await supa.from('games').select('world').eq('id', GAME_ID).single();
+  const finalWorld = gRow && gRow.world;
+  const rankOf = computeTrueRank(teams, finalWorld);
+  const cashRankOf = computeCashRank(teams);
+
+  renderBidTable(teams, bulls, bids, rankOf);
+  renderBridgeTable(teams, bulls, rankOf);
+  renderEquityTable(teams, finalWorld, rankOf, cashRankOf);
+
+  const cfByTeam = {};
+  for (const t of humanTeams) {
+    if (isBusted(t)) continue; // liquidated teams have no meaningful "actual" cash to compare
+    try { cfByTeam[t.id] = await computeCounterfactual(t, ranchesAll, bulls); }
+    catch (e) { console.warn('counterfactual failed for', t.name, e); }
+  }
+  renderCfTable(teams, ranchesAll, bulls, rankOf, cfByTeam);
 }
 
 // ---- Bust-out (Steven 9/07): a team can go under and is then out of the game. Rule:

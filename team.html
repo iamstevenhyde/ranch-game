@@ -312,6 +312,11 @@
       <div id="bullCards"></div>
       <!-- sticky exposure HUD: stays pinned to the viewport bottom while scrolling lots -->
       <div id="auctionExposure" class="consequence"></div>
+      <!-- rationale gate (Item 1): a one-line reason is required for every Lock In -->
+      <div style="margin-top:0.9rem">
+        <label for="lockinRationale" style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:0.25rem">One-line rationale for this year's plan (required to lock in)</label>
+        <input type="text" id="lockinRationale" maxlength="280" placeholder="Why this plan, in one line" style="margin-bottom:0">
+      </div>
       <div class="row" style="margin-top:0.9rem;display:flex;align-items:center;gap:0.8rem">
         <button id="btnLockYear" onclick="submitPlay()">Lock In Year</button>
         <span class="status" id="lockMsg" style="font-size:0.82rem;color:var(--muted)">Locks your operations and all bids together. Revise anytime until the year resolves.</span>
@@ -350,7 +355,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=1701580de8"></script>
+<script src="engine.js?v=618994bff3"></script>
 <script src="recap.js?v=67b2825eaf"></script>
 <!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
 <script src="assets/bulls/manifest.js?v=2"></script>
@@ -471,6 +476,7 @@ async function joinGame() {
 
   subscribeToGame();
   startPolling();
+  watchViewSections();
 }
 
 // ---- Realtime: watch game phase ----
@@ -868,15 +874,15 @@ function applyDecisions(r, w, expandCows, debtAction, techChoices, semenChoice) 
   if (debtAction > 0 && (w.year || CUR_YEAR) < RanchEngine.UNLOCKS.debt) debtAction = 0;
   if ((w.year || CUR_YEAR) < RanchEngine.UNLOCKS.tech) { techChoices = []; semenChoice = null; }
   if (r.cash < 0 && r.a.debtCap > 0) { const room = r.a.debtCap * Math.max(0, RanchEngine.equity(r, w)) - r.debt; const draw = Math.min(-r.cash, Math.max(0, room)); if (draw > 0) { r.debt += draw; r.cash += draw; } }
-  if (r.cash < 0) { const sell = Math.min(Math.max(0, r.herd - 100), Math.ceil(-r.cash / (1200 * w.feederIdx))); if (sell > 0) { r.herd -= sell; r.cash += sell * 1150 * w.feederIdx; r.rep -= 2; } }
-  if (expandCows > 0) { const cp = 1675 * w.feederIdx; const mx = Math.min(expandCows, r.landCap - r.herd, Math.round(r.herd * 0.35), Math.floor(r.cash / cp)); if (mx > 0) { r.herd += mx; r.cash -= mx * cp; } }
-  if (expandCows < 0) { const sell = Math.min(Math.abs(expandCows), Math.max(0, r.herd - 100)); if (sell > 0) { r.herd -= sell; r.cash += sell * (RanchEngine.droughtSeverity(w, r.region) > 0 ? 1500 : 1400) * w.feederIdx; } }
+  if (r.cash < 0) { const sell = Math.min(Math.max(0, r.herd - 100), Math.ceil(-r.cash / (1200 * w.feederIdx))); if (sell > 0) { r.herd -= sell; r.cash += sell * 1150 * w.feederIdx; RanchEngine.bookCash(r, 'cows', sell * 1150 * w.feederIdx); r.rep -= 2; } }
+  if (expandCows > 0) { const cp = 1675 * w.feederIdx; const mx = Math.min(expandCows, r.landCap - r.herd, Math.round(r.herd * 0.35), Math.floor(r.cash / cp)); if (mx > 0) { r.herd += mx; r.cash -= mx * cp; RanchEngine.bookCash(r, 'cows', -mx * cp); } }
+  if (expandCows < 0) { const sell = Math.min(Math.abs(expandCows), Math.max(0, r.herd - 100)); if (sell > 0) { const proceeds = sell * (RanchEngine.droughtSeverity(w, r.region) > 0 ? 1500 : 1400) * w.feederIdx; r.herd -= sell; r.cash += proceeds; RanchEngine.bookCash(r, 'cows', proceeds); } }
   if (debtAction > 0) { const amt = Math.min(debtAction, r.a.debtCap * Math.max(0, RanchEngine.equity(r, w)) - r.debt); if (amt > 0) { r.debt += amt; r.cash += amt; } }
   if (debtAction < 0) { const pay = Math.min(Math.abs(debtAction), r.debt, Math.max(0, r.cash - 40000)); if (pay > 0) { r.debt -= pay; r.cash -= pay; } }
   // adopt every chosen tech you can still afford, in the order selected (cheapest-first is
   // handled by the player); each one you cannot afford is simply skipped
   for (const t of (techChoices || [])) {
-    if (!r.tech.has(t) && r.cash >= RanchEngine.TECHS[t].capex) { r.tech.add(t); r.cash -= RanchEngine.TECHS[t].capex; }
+    if (!r.tech.has(t) && r.cash >= RanchEngine.TECHS[t].capex) { r.tech.add(t); r.cash -= RanchEngine.TECHS[t].capex; RanchEngine.bookCash(r, 'tech', -RanchEngine.TECHS[t].capex); }
   }
   // AI-semen program: engine buySemen rolls the conception rate and moves the herd next
   // production year (weighted by that rate). One program per season.
@@ -959,6 +965,19 @@ async function refreshBoard(world) {
       `<summary style="cursor:pointer;font-family:var(--serif);font-weight:700;color:var(--tan);padding:0.3rem 0">` +
       `Your Year ${priorYear} results and the Cattlemen's Weekly, Year ${priorYear} wrap (click to collapse)</summary>` +
       `<div class="card" style="margin-bottom:0.7rem">` + mine + `</div>` + weekly + traj + `</details>`;
+    // view event (Item 5): the recap opens by default here, and this block only rebuilds
+    // once per year (never on the 4s poll tick), so logging right after the open render is
+    // "the open", not a per-render spam. A real user toggle-open also logs, via the listener.
+    if (!loggedRecapYears.has(priorYear)) {
+      loggedRecapYears.add(priorYear);
+      logDecision('view_event', { target: 'weekly_recap', year: priorYear });
+    }
+    const recapDetails = recapEl.querySelector('details');
+    if (recapDetails) {
+      recapDetails.addEventListener('toggle', () => {
+        if (recapDetails.open) logDecision('view_event', { target: 'weekly_recap', year: priorYear });
+      });
+    }
   } else { recapEl.innerHTML = ''; }
 
   // Situation banner (Frostpunk directional framing, colored by drought severity)
@@ -1347,6 +1366,9 @@ function renderDealsPanel() {
     `<div id="dealLists"></div>`;
   onDealTypeChange();
   renderDealLists();
+  // view event for the deals panel is scroll-driven (IntersectionObserver, see
+  // watchViewSection below), not fired here: a render tells us the panel existed on the
+  // page, not that the table actually looked at it.
 }
 function onDealTypeChange() { renderDealPartner(); renderDealTerms(); }
 // partner list; infrastructure co-ops are limited to SAME-REGION ranches (shared ground / water)
@@ -1625,6 +1647,33 @@ function fitNote(r) {
 // time, so pressing Lock In again is idempotent (no double-spend on revise).
 async function submitPlay() {
   if (!boardBaseSt) { msg('Page not ready, reopen it.', 'err'); return; }
+
+  // rationale gate (Item 1): a one-line reason is required for every Lock In, plus a
+  // separate one-line reason for any bid over 2x that bull's anchor. Validate before
+  // touching anything so a failed gate never disables the button or half-submits.
+  const rationaleEl = document.getElementById('lockinRationale');
+  const rationaleText = (rationaleEl ? rationaleEl.value : '').trim();
+  if (rationaleText.length < 3 || rationaleText.length > 280) {
+    msg('Give a one-line rationale for this year\'s plan (3-280 characters) before locking in.', 'err');
+    return;
+  }
+  const gateInputs = [...document.querySelectorAll('#bullCards input[type=number]')];
+  const bidRationales = {};
+  for (const inp of gateInputs) {
+    const bullId = inp.id.replace('bid_', '');
+    const amt = Number(inp.value);
+    const anchor = Number(inp.getAttribute('data-anchor')) || 0;
+    if (amt > 0 && anchor > 0 && amt > anchor * 2) {
+      const rEl = document.getElementById('bidRationale_' + bullId);
+      const text = (rEl ? rEl.value : '').trim();
+      if (text.length < 3 || text.length > 280) {
+        msg('That bid is over 2x anchor: give a one-line reason (3-280 characters) for that bull before locking in.', 'err');
+        return;
+      }
+      bidRationales[bullId] = { text, amount: amt, anchor, ratio: amt / anchor };
+    }
+  }
+
   document.getElementById('btnLockYear').disabled = true;
   try {
     const raw = localStorage.getItem(boardKey());
@@ -1669,6 +1718,16 @@ async function submitPlay() {
                    debt: boardChoice.debt, techs: boardChoice.techs,
                    semenSell: boardChoice.semenSell, bids: upserts.length, expandCows: n.expandCows, debtAction: n.debtAction } });
 
+    // rationale gate (Item 1): log fresh rows every Lock In, including revisions, since
+    // revisions are research data too, not a state to dedupe against.
+    await logDecision('rationale_lockin',
+      { text: rationaleText, year: CUR_YEAR, herd: boardChoice.herd, cull: boardChoice.cull,
+        debt: boardChoice.debt, techs: boardChoice.techs, bids: upserts.length });
+    for (const [bullId, info] of Object.entries(bidRationales)) {
+      await logDecision('rationale_bid',
+        { text: info.text, bull_id: bullId, amount: info.amount, anchor: info.anchor, ratio: info.ratio });
+    }
+
     const warn = overCash ? ' Note: a bid tops your cash, so winning it would force a fire sale.' : '';
     msg('Year locked: ' + r.herd.toLocaleString() + ' head, $' + Math.round(r.cash).toLocaleString() + ' cash, ' + upserts.length + ' bid' + (upserts.length === 1 ? '' : 's') + '. Revise until the year resolves.' + warn, 'ok');
     await refreshMyStats();
@@ -1683,6 +1742,8 @@ function emphasis(v) { return v >= 1.4 ? 'High' : v >= 0.8 ? 'Med' : 'Low'; }
 function emphColor(v) { return v >= 1.4 ? '#2e7d32' : v >= 0.8 ? '#a06a1b' : '#999'; }
 // pre-bid telegraphing (Into the Breach rule: show the consequence before the commit)
 let AUCTION_CASH = 0, AUCTION_SLOTS = 0, AUCTION_LOTS = 0;
+// view events (Item 5): log the open once per year per target, never per poll tick
+const loggedRecapYears = new Set();
 function bidInputs() {
   return [...document.querySelectorAll('#bullCards input[type=number]')]
     .map(i => Number(i.value)).filter(v => v > 0);
@@ -1690,7 +1751,12 @@ function bidInputs() {
 function updateBidConseq(bullId) {
   const el = document.getElementById('conseq_' + bullId);
   if (!el) return;
-  const v = Number((document.getElementById('bid_' + bullId) || {}).value);
+  const bidEl = document.getElementById('bid_' + bullId);
+  const v = Number((bidEl || {}).value);
+  // rationale gate (Item 1): show the reason box once a bid tops 2x the bull's anchor
+  const anchor = Number((bidEl && bidEl.getAttribute('data-anchor')) || 0);
+  const rWrap = document.getElementById('bidRationaleWrap_' + bullId);
+  if (rWrap) rWrap.style.display = (v > 0 && anchor > 0 && v > anchor * 2) ? '' : 'none';
   if (v > 0) onboardStep('bid');
   if (!v) { el.textContent = ''; return; }
   const left = AUCTION_CASH - v;
@@ -1723,6 +1789,49 @@ function updateExposure() {
     (over ? ` <span style="color:#d99079">Bids exceed your cash: the sale can bust you.</span>` : ``);
 }
 
+// ---- View events via IntersectionObserver (Item 5) ----
+// A render-fired "opened the catalog / deals panel" event cannot tell "the page contained
+// this section" from "this table actually scrolled down and looked at it" (e.g. the deals
+// panel sits low on the combined board and is easy to never scroll to). So these two
+// targets are logged only when a meaningful chunk of the container is actually in the
+// viewport for a sustained moment, once per year per team. The "meaningful chunk" test is
+// a fixed pixel floor, not a ratio of the container's own height: the bull catalog can run
+// taller than the viewport once 6 lots render, so no scroll position would ever put 50% of
+// the WHOLE container on screen, and a ratio threshold would silently never fire for it.
+// dwell_ms is best-effort: the time between the confirmed view and the section leaving the
+// viewport (which also fires naturally when showOnly() hides the board at year-end, so a
+// normal playthrough gets one dwell reading per year without the team scrolling away on
+// purpose).
+const VIEW_CONFIRM_MS = 400; // must stay in view this long to count as "viewed", not a scroll-past
+const VIEW_MIN_PX = 200;     // pixels of the container that must be on screen to count as "in view"
+function watchViewSection(el, target) {
+  if (!el || typeof IntersectionObserver === 'undefined') return;
+  const st = { pendingTimer: null, enterAt: 0, confirmed: false, loggedYear: null };
+  new IntersectionObserver((entries) => {
+    const entry = entries[entries.length - 1];
+    const visiblePx = entry.isIntersecting ? entry.intersectionRect.height : 0;
+    if (visiblePx >= VIEW_MIN_PX) {
+      if (st.pendingTimer || st.confirmed) return; // already pending/confirmed this visit
+      st.enterAt = performance.now();
+      st.pendingTimer = setTimeout(() => { st.pendingTimer = null; st.confirmed = true; }, VIEW_CONFIRM_MS);
+    } else {
+      if (st.pendingTimer) { clearTimeout(st.pendingTimer); st.pendingTimer = null; }
+      if (st.confirmed && st.loggedYear !== CUR_YEAR) {
+        st.loggedYear = CUR_YEAR;
+        logDecision('view_event', { target, year: CUR_YEAR, dwell_ms: Math.round(performance.now() - st.enterAt) });
+      }
+      st.confirmed = false;
+    }
+  }, { threshold: [0, 0.01, 0.5, 1] }).observe(el);
+}
+// #bullCards and #dealsPanel are static containers that persist for the whole game (their
+// children are replaced, the elements are not), so one observer set up at join time covers
+// every year; the loggedYear check inside each observer re-arms it as CUR_YEAR advances.
+function watchViewSections() {
+  watchViewSection(document.getElementById('bullCards'), 'catalog');
+  watchViewSection(document.getElementById('dealsPanel'), 'deals');
+}
+
 async function refreshAuction(world) {
   const [{ data: bulls }, { data: team }] = await Promise.all([
     supa.from('bulls').select('*').eq('game_id', GAME_ID).eq('year', CUR_YEAR).order('created_at'),
@@ -1744,6 +1853,9 @@ async function refreshAuction(world) {
   renderHerdPanel(st);
   renderBullCards(bulls || [], world, st, bidMap);
   updateExposure();
+  // view event for the catalog is scroll-driven (IntersectionObserver, see
+  // watchViewSection below), not fired here: a render tells us the catalog existed on the
+  // page, not that the table actually scrolled down to look at it.
 }
 
 // a bull's $Beef: the real catalog value when we have it, otherwise computed from his
@@ -1855,12 +1967,18 @@ function renderBullCards(bulls, world, st, bidMap) {
         : `<div class="bid-row" style="margin-top:0.4rem">` +
             // one lock-in for the whole year, so bids are just entered here (no per-lot
             // button); in-progress typing wins over the saved bid so a poll never clobbers it
-            `<input type="number" id="bid_${b.id}" data-reserve="${Math.round(b.reserve)}" min="${Math.round(b.reserve)}" placeholder="Max bid ($, min $${Math.round(b.reserve).toLocaleString()})"` +
+            `<input type="number" id="bid_${b.id}" data-reserve="${Math.round(b.reserve)}" data-anchor="${Math.round(b.anchor)}" min="${Math.round(b.reserve)}" placeholder="Max bid ($, min $${Math.round(b.reserve).toLocaleString()})"` +
               ` oninput="updateBidConseq('${b.id}')"` +
               (typed['bid_' + b.id] !== undefined ? ` value="${typed['bid_' + b.id]}"` : existing ? ` value="${Math.round(existing)}"` : '') + `>` +
             (existing ? ` <span class="submitted">Locked: $${Math.round(existing).toLocaleString()}</span>` : '') +
           `</div>` +
-          `<div id="conseq_${b.id}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem;min-height:1em"></div>`
+          `<div id="conseq_${b.id}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem;min-height:1em"></div>` +
+          // rationale gate (Item 1): a bid over 2x anchor needs its own one-line reason,
+          // shown only when it applies (updateBidConseq toggles this on input)
+          `<div id="bidRationaleWrap_${b.id}" style="display:none;margin-top:0.3rem">` +
+            `<input type="text" id="bidRationale_${b.id}" maxlength="280" placeholder="This bid is over 2x anchor: one-line reason required to lock in"` +
+              (typed['bidRationale_' + b.id] !== undefined ? ` value="${esc(typed['bidRationale_' + b.id])}"` : '') + `>` +
+          `</div>`
       ) +
       `</div>`; // close the padded body opened after the photo plate
     container.appendChild(div);
@@ -2045,7 +2163,7 @@ async function showResults(world) {
   // end-of-game debriefs (C1 winner's curse, D1 robustness). Appended after the main
   // render so the yearly resolve path stays synchronous and fast.
   if (PHASE === 'ended') {
-    const extra = (await winnersCurseDebrief(nameById)) + robustnessReplay(st, world);
+    const extra = (await winnersCurseDebrief(nameById)) + robustnessReplay(st, world) + exitSurveyHtml();
     document.getElementById('cardWon').insertAdjacentHTML('beforeend', extra);
   }
   // visibility is owned by showOnly() in handlePhaseChange; do not force it here or a
@@ -2129,6 +2247,71 @@ function robustnessReplay(st, world) {
     `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">Robustness Check: Same Ranch, Three Weathers</div>` +
     `<div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.6rem">Your ranch as it stands, run one more year against three drought draws. A tight spread means a robust operation with a small ${g('drawdown', 'drawdown')}; a wide one means you were optimized for the weather you happened to get.</div>` +
     `<table style="width:100%;font-size:0.82rem"><thead><tr><th>Scenario</th><th>Year net</th><th>Herd</th><th>Equity</th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+// ---- Exit survey (Item 5): three questions on the ended screen, one decisions row per
+// answer. localStorage guards a double-submit surviving a page reload; the in-page state
+// (SURVEY_Q2, SURVEY_SUBMITTING) guards a double-click within the same load. ----
+function surveyKey() { return 'survey_' + GAME_ID + '_' + TEAM_ID; }
+let SURVEY_Q2 = null, SURVEY_SUBMITTING = false;
+function exitSurveyHtml() {
+  if (localStorage.getItem(surveyKey()) === 'done') {
+    return `<div class="card" id="exitSurveyCard" style="margin-top:0.9rem">` +
+      `<div style="font-family:var(--serif);font-weight:700;color:var(--tan)">Exit survey</div>` +
+      `<div style="font-size:0.82rem;color:var(--muted);margin-top:0.3rem">Thanks, your answers are recorded.</div></div>`;
+  }
+  return `<div class="card" id="exitSurveyCard" style="margin-top:0.9rem">` +
+    `<div style="font-family:var(--serif);font-weight:700;color:var(--tan);margin-bottom:0.5rem">Exit survey (3 questions)</div>` +
+    `<div style="margin-bottom:0.6rem">` +
+      `<label for="survQ1" style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:0.25rem">1. What was your table's main strategy in one line?</label>` +
+      `<input type="text" id="survQ1" maxlength="280" placeholder="One line" style="margin-bottom:0">` +
+    `</div>` +
+    `<div style="margin-bottom:0.6rem">` +
+      `<label style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:0.25rem">2. Looking back, was your bidding too high, about right, or too low?</label>` +
+      `<div class="opt-row" id="survQ2Row">` +
+        `<button type="button" class="opt" data-v="too high" onclick="pickSurveyQ2(this)"><div class="opt-t">Too high</div></button>` +
+        `<button type="button" class="opt" data-v="about right" onclick="pickSurveyQ2(this)"><div class="opt-t">About right</div></button>` +
+        `<button type="button" class="opt" data-v="too low" onclick="pickSurveyQ2(this)"><div class="opt-t">Too low</div></button>` +
+      `</div>` +
+    `</div>` +
+    `<div style="margin-bottom:0.6rem">` +
+      `<label for="survQ3" style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:0.25rem">3. What would you do differently with one more year?</label>` +
+      `<input type="text" id="survQ3" maxlength="280" placeholder="One line" style="margin-bottom:0">` +
+    `</div>` +
+    `<button id="btnSurveySubmit" onclick="submitExitSurvey()">Submit survey</button>` +
+    `<div id="surveyMsg" style="font-size:0.8rem;margin-top:0.5rem"></div>` +
+  `</div>`;
+}
+function pickSurveyQ2(el) {
+  SURVEY_Q2 = el.getAttribute('data-v');
+  [...el.parentElement.children].forEach(b => b.classList.toggle('on', b === el));
+}
+async function submitExitSurvey() {
+  if (SURVEY_SUBMITTING || localStorage.getItem(surveyKey()) === 'done') return;
+  const q1 = (document.getElementById('survQ1') || {}).value ? document.getElementById('survQ1').value.trim() : '';
+  const q3 = (document.getElementById('survQ3') || {}).value ? document.getElementById('survQ3').value.trim() : '';
+  const surveyMsg = document.getElementById('surveyMsg');
+  if (!q1 || !SURVEY_Q2 || !q3) {
+    if (surveyMsg) { surveyMsg.textContent = 'Answer all three questions before submitting.'; surveyMsg.style.color = '#d99079'; }
+    return;
+  }
+  SURVEY_SUBMITTING = true;
+  const btn = document.getElementById('btnSurveySubmit');
+  if (btn) btn.disabled = true;
+  try {
+    await logDecision('survey_answer', { q: 1, question: "What was your table's main strategy in one line?", answer: q1 });
+    await logDecision('survey_answer', { q: 2, question: 'Looking back, was your bidding too high, about right, or too low?', answer: SURVEY_Q2 });
+    await logDecision('survey_answer', { q: 3, question: 'What would you do differently with one more year?', answer: q3 });
+    localStorage.setItem(surveyKey(), 'done');
+    const card = document.getElementById('exitSurveyCard');
+    if (card) card.innerHTML =
+      `<div style="font-family:var(--serif);font-weight:700;color:var(--tan)">Exit survey</div>` +
+      `<div style="font-size:0.82rem;color:var(--muted);margin-top:0.3rem">Thanks, your answers are recorded.</div>`;
+  } catch (e) {
+    SURVEY_SUBMITTING = false;
+    if (btn) btn.disabled = false;
+    if (surveyMsg) { surveyMsg.textContent = 'Could not submit, try again.'; surveyMsg.style.color = '#d99079'; }
+  }
 }
 
 // ---- Your Books: the income statement (does the money flow make sense?) and the
