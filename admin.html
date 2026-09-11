@@ -76,6 +76,7 @@
   .ratio-ok { color: var(--sage); font-weight: bold; }
   .bridge-resid { color: var(--rust); font-weight: bold; }
   .bridge-resid.zero { color: var(--sage); font-weight: normal; }
+  .rank-split { color: var(--rust); font-weight: bold; }
   .bridge-resid.big { color: #fff; background: var(--rust); padding: 0.15rem 0.4rem; border-radius: 3px; }
   .cf-worse { color: var(--rust); font-weight: bold; }
   .cf-better { color: var(--sage); font-weight: bold; }
@@ -203,14 +204,24 @@
       <button class="metric-btn" id="btnMetRep" onclick="setMetric('rep')">Reputation</button>
     </h2>
     <div class="card">
+      <div class="debrief-note" style="margin-bottom:0.9rem">Two rankings, and they are not the same
+        race. <b>Scorecard</b> is each outfit measured against its own strategy's weights, which is what
+        the game actually scores. <b>Cash</b> is the bank balance. A team can lead one and trail the
+        other; where they disagree is the interesting part.</div>
       <table id="tblLB">
-        <thead><tr><th>Rank</th><th>Team</th><th id="lbMetricHeader">Cash</th><th>Bar</th></tr></thead>
+        <thead><tr><th>Scorecard</th><th>Cash</th><th>Team</th><th id="lbMetricHeader">Cash</th><th>Bar</th></tr></thead>
         <tbody id="tbodyLB"></tbody>
       </table>
     </div>
   </section>
 
-  <!-- Debrief (projector, end of game): item 3, 9/10. "The table that did the least won." -->
+  <!-- Debrief (projector, end of game). Panel order is deliberate (Steven 9/10): the O
+       column leads, then scorecard-vs-cash, because the 9/08 debrief led with the winner's
+       curse and the room never heard the Week 3 lesson that was sitting in its own logs.
+       NOTE: do not restore "the table that did the least won" anywhere here. It was checked
+       against live state on 9/10 and is false three ways -- that table did not play a
+       default board, it placed 4th on the engine's scorecard, and the ranking that crowned
+       it was ending cash. -->
   <section id="secDebrief" style="display:none">
     <h2>End-of-Game Debrief</h2>
     <div class="debrief-note" style="font-size:1rem;margin-bottom:1.2rem">Row order below comes from
@@ -220,25 +231,52 @@
       the archetype's own objective, not survival of the balance sheet. <strong>Resolved 9/10:</strong> the 2026-09-08
       class report's own "Rank" column, despite its text calling rank "the game's own scorecard... not the same thing
       as raw dollars," is in fact a plain ending-cash sort -- verified exactly against the live game for all 8 teams.
-      The Equity panel below shows both orderings side by side (scorecard rank, cash rank in parentheses where they
+      Panel 3 below shows both orderings side by side (scorecard rank, cash rank in parentheses where they
       differ) so that gap is visible on the projector, not just asserted: on 9/08, Railli's Rough Riders finished
       LAST on cash but FIRST on its own archetype's scorecard (rapid_expansion weights herd growth 60%, and their
       herd went 1,276 to 1,981), while The Mad Cows! finished first on cash but fourth on the scorecard.</div>
 
     <div class="debrief-card">
-      <div class="debrief-title">1. Bid-to-Anchor: two different questions, two different answers</div>
-      <div class="debrief-note">Anchor is the bull's modeled fair value; 1.0x is a fair-value bid. These are two
-        separate statistics that can point opposite directions -- a team can look disciplined on one and reckless on
-        the other. <strong>Median, bids placed</strong> is across every bid a team submitted, won or lost.
-        <strong>Average, bulls won</strong> is only the lots a team actually took home (the class report's own
-        "price / anchor" measure). The gap between them <em>is</em> the winner's curse: a team wins precisely the
-        lots it most overvalued, so its won-lot average runs hotter than its placed-bid median. Lot and bid counts
-        below are read off this game's own tables, not asserted.</div>
+      <div class="debrief-title">1. Resources Owned vs Resources Exploited</div>
+      <div class="debrief-note"><strong>Access is not advantage.</strong> Owning a herd sire is the V, R and I of
+        VRIO. Being staffed and organised to actually use him is the O, and it is where outfits fail. A short-handed
+        crew still owns the bull and still paid for him, but the herd only realises
+        <code>utilization<sup>1.5</sup></code> of his genetics, so at 50% staffed about a third of what you bought
+        lands. <em>Exploited</em> below is that utilisation year by year. <strong>Stockmanship</strong> is the one
+        asset here that cannot be bought, sold or traded: it builds only by staying on one cull focus and most of it
+        is lost the year you switch. <strong>Tech load</strong> is the standing management burden of the tools owned,
+        because a tool does not manage itself.</div>
+      <div id="debriefOTable"></div>
+    </div>
+
+    <div class="debrief-card">
+      <div class="debrief-title">2. Bid-to-Anchor: the same bull is worth different money to different ranches</div>
+      <div class="debrief-note">This panel is about VRIO's <strong>V</strong>. Anchor is the bull's modeled fair
+        value to the market; 1.0x is a fair-value bid. Ranches bid past it because the same animal is genuinely worth
+        different money to different outfits: an archetype's <code>traitVal</code> weights and its region's forage and
+        climate decide which traits pay, so a bull who is ordinary to one table is the missing piece for another.
+        Value is relative to the holder, not intrinsic to the asset.
+        <strong>Median, bids placed</strong> is across every bid a team submitted, won or lost;
+        <strong>average, bulls won</strong> only the lots it took home. A gap between them means a team won precisely
+        the lots it valued most highly, which is what winning an auction means.
+        <em>Not framed here as a winner's curse:</em> measured on the 9/08 catalog, catalog value and true value
+        correlate at r = 0.987, because the five traits are averaged and that cuts the per-trait noise by a factor of
+        the square root of five. There is almost no common-value uncertainty left to be cursed by. Teams bid these
+        multiples with near-perfect information, which is a different and more interesting problem.
+        Lot and bid counts are read off this game's own tables, not asserted.</div>
       <div id="debriefBidTable"></div>
     </div>
 
     <div class="debrief-card">
-      <div class="debrief-title">2. Cash Bridge: where the money went</div>
+      <div class="debrief-title">3. Scorecard vs Cash: two different races</div>
+      <div class="debrief-note">Equity = cash minus debt plus herd value at the final year's feeder index, the game's
+        own formula and the only outcome measure the class report states (there is no ending-cash figure in the
+        report or the CSV). Where a number here can be checked against the report, it is checked on equity, not cash.</div>
+      <div id="debriefEquityTable"></div>
+    </div>
+
+    <div class="debrief-card">
+      <div class="debrief-title">4. Cash Bridge: where the money went</div>
       <div class="debrief-note">Starting cash is after the ranch purchase. Operating net covers calf and bull-sale
         revenue less feed, labor, payroll, interest and overhead. Components that cannot be reconstructed from the
         game log fall into "Other / unexplained" rather than being forced to balance. Cows, semen and deals come
@@ -249,15 +287,7 @@
     </div>
 
     <div class="debrief-card">
-      <div class="debrief-title">2b. Equity Bridge: the outcome the class report actually publishes</div>
-      <div class="debrief-note">Equity = cash minus debt plus herd value at the final year's feeder index, the game's
-        own formula and the only outcome measure the class report states (there is no ending-cash figure in the
-        report or the CSV). Where a number here can be checked against the report, it is checked on equity, not cash.</div>
-      <div id="debriefEquityTable"></div>
-    </div>
-
-    <div class="debrief-card">
-      <div class="debrief-title">3. Default-Board Counterfactual: what if the team had done nothing?</div>
+      <div class="debrief-title">5. Default-Board Counterfactual: what if the team had done nothing?</div>
       <div class="debrief-note">Held fixed: the team's own ranch and region, the actual world and drought/shock path
         each year, and the team's actual auction purchases (same bulls, same prices). Operations are replaced with
         the engine default every year: hold herd, no tech, no AI-semen program, no hires, no debt change, and a
@@ -272,7 +302,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=618994bff3"></script>
+<script src="engine.js?v=ac44d7bd8c"></script>
 <script src="recap.js?v=67b2825eaf"></script>
 <script>
 'use strict';
@@ -1311,8 +1341,18 @@ function setMetric(m) {
 }
 
 async function renderLeaderboard() {
-  const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
+  const [{ data: teams }, { data: gRow }] = await Promise.all([
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+    supa.from('games').select('world').eq('id', GAME_ID).single(),
+  ]);
   if (!teams || !teams.length) return;
+
+  // Dual rank (Steven 9/10). The room watched a pure cash race on 9/08 while the balance
+  // gates certify an archetype-weighted winner, and the class report then labelled the cash
+  // order as the scorecard. Showing both, all game, is the fix: same helpers the debrief
+  // uses, so the projector and the end screen can never disagree again.
+  const scoreRankOf = computeTrueRank(teams, gRow && gRow.world);
+  const cashRankOf = computeCashRank(teams);
 
   const rows = teams.map(t => {
     const st = t.state ? reviveState(t.state) : null;
@@ -1322,8 +1362,9 @@ async function renderLeaderboard() {
       else if (lb_metric === 'herd') val = st.herd;
       else val = st.rep || 0;
     }
-    return { name: t.name, val, is_ai: t.is_ai, busted: isBusted(t) ? t.state.busted.year : 0 };
-  }).sort((a, b) => (a.busted ? 1 : 0) - (b.busted ? 1 : 0) || b.val - a.val);
+    return { name: t.name, val, is_ai: t.is_ai, busted: isBusted(t) ? t.state.busted.year : 0,
+             scoreRank: scoreRankOf[t.id], cashRank: cashRankOf[t.id] };
+  }).sort((a, b) => (a.busted ? 1 : 0) - (b.busted ? 1 : 0) || (a.scoreRank || 99) - (b.scoreRank || 99));
 
   const maxVal = Math.max(...rows.map(r => r.val), 1);
   const tbody = document.getElementById('tbodyLB');
@@ -1336,7 +1377,11 @@ async function renderLeaderboard() {
       : lb_metric === 'rep'
         ? r.val.toFixed(0)
         : '$' + Math.round(r.val).toLocaleString();
-    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.name)}${r.is_ai ? ' <span class="tag tag-ai">AI</span>' : ''}` +
+    // flag the disagreement itself: that is the thing worth pointing at on the projector
+    const split = (r.scoreRank && r.cashRank && r.scoreRank !== r.cashRank);
+    tr.innerHTML = `<td><b>${r.scoreRank || '-'}</b></td>` +
+      `<td class="${split ? 'rank-split' : ''}">${r.cashRank || '-'}</td>` +
+      `<td>${esc(r.name)}${r.is_ai ? ' <span class="tag tag-ai">AI</span>' : ''}` +
       (r.busted ? ` <span class="tag tag-autolock">busted yr ${r.busted}</span>` : '') + `</td>` +
       `<td>${r.busted ? '-' : dispVal}</td><td><span class="lb-bar" style="width:${r.busted ? 2 : barW}px"></span></td>`;
     tbody.appendChild(tr);
@@ -1374,8 +1419,10 @@ async function fetchDebriefData() {
 //   - "bids placed" median: across EVERY bid a team submitted, won or lost.
 //   - "bulls won" average: across only the lots a team actually took home, the same
 //     measure the class report's own "price / anchor" table uses (average, not median).
-// The gap between them is the winner's curse itself: a team wins precisely the lots it
-// most overvalued, so its won-lot average runs hotter than its placed-bid median.
+// A gap between them means a team won precisely the lots it valued most highly, which is
+// what winning an auction means. NOT labelled a winner's curse here (Steven 9/10): catalog
+// and truth correlate at r = 0.987 once the five traits are averaged, so there is almost no
+// common-value uncertainty left to be cursed by. This panel is about VRIO's V.
 function teamBidRatios(teamId, bulls, bids) {
   const bullById = Object.fromEntries(bulls.map(b => [b.id, b]));
   const mine = bids.filter(b => b.team_id === teamId);
@@ -1401,6 +1448,67 @@ function teamBidRatios(teamId, bulls, bids) {
     maxWinRatio: winRatios.length ? Math.max(...winRatios) : null,
     curseGap: (avgWinRatio != null && all.length) ? avgWinRatio - RanchEngine.median(all) : null,
   };
+}
+
+// ---- 1. Resources owned vs resources exploited (VRIO's O) ----
+// Reads only stored state. utilHist is written every year by productionYear (engine);
+// games played before that carry the same number as yearHistory[].exploited, so old
+// games still render. The realised share is utilization^UTIL_K, the engine's own formula,
+// not a re-derivation: at 50% staffed a herd realises about 35% of what it bought.
+function teamOColumn(team) {
+  const st = reviveState(team.state);
+  if (!st) return null;
+  let hist = Array.isArray(st.utilHist) && st.utilHist.length
+    ? st.utilHist.map(Number)
+    : (st.yearHistory || []).map(h => (Number(h.exploited) || 0) / 100);
+  hist = hist.filter(x => isFinite(x));
+  const mean = hist.length ? hist.reduce((a, b) => a + b, 0) / hist.length : null;
+  let worst = null, worstYear = null;
+  hist.forEach((u, i) => { if (worst == null || u < worst) { worst = u; worstYear = i + 1; } });
+  const K = (RanchEngine.UTIL_K != null) ? RanchEngine.UTIL_K : 1.5;
+  const techs = [...(st.tech || [])];
+  const techLoad = techs.reduce((a, t) => a + (((RanchEngine.TECHS || {})[t] || {}).mgmtLoad || 0), 0);
+  return {
+    busted: isBusted(team), hist, mean, worst, worstYear,
+    realisedAtWorst: worst != null ? Math.pow(worst, K) : null,
+    activeBulls: ((st.bulls || []).filter(b => !b.inherited)).length,
+    hands: st.hands, tacit: st.tacit, tacitFocus: st.tacitFocus,
+    techCount: techs.length, techLoad,
+  };
+}
+
+function renderOTable(teams, rankOf) {
+  const pct = v => v == null ? '-' : Math.round(v * 100) + '%';
+  const rows = teams.filter(t => !t.is_ai).map(t => ({ t, o: teamOColumn(t) })).filter(x => x.o)
+    .sort((a, b) => (rankOf[a.t.id] || 99) - (rankOf[b.t.id] || 99));
+  if (!rows.length) { document.getElementById('debriefOTable').innerHTML =
+    '<div class="debrief-note">No team state to read.</div>'; return; }
+  const trs = rows.map(({ t, o }) => {
+    const byYear = o.hist.map((u, i) =>
+      `<span style="${u < 0.999 ? 'color:var(--rust);font-weight:bold' : 'color:var(--muted)'}">Y${i + 1} ${Math.round(u * 100)}%</span>`
+    ).join('&nbsp; ');
+    const worstTxt = o.worst == null ? '-'
+      : `${pct(o.worst)}${o.worstYear ? ' (Y' + o.worstYear + ')' : ''}`;
+    const realised = o.realisedAtWorst == null ? '-' : pct(o.realisedAtWorst);
+    const tacitTxt = o.tacit == null ? '<span style="color:var(--muted)">n/a</span>'
+      : `${Math.round(o.tacit * 100)}%${o.tacitFocus ? ' <span style="color:var(--muted);font-size:0.8em">' + esc(o.tacitFocus) + '</span>' : ''}`;
+    const flag = (o.mean != null && o.mean < 0.85) ? ' class="bridge-resid big"' : '';
+    return `<tr class="${rankOf[t.id] === 1 ? 'debrief-rank1' : ''}">` +
+      `<td class="debrief-team-name">${esc(t.name)}</td>` +
+      `<td>${o.activeBulls}</td>` +
+      `<td>${o.hands != null ? Number(o.hands).toFixed(2) : '-'}</td>` +
+      `<td${flag}>${pct(o.mean)}</td>` +
+      `<td>${worstTxt}</td>` +
+      `<td>${realised}</td>` +
+      `<td>${tacitTxt}</td>` +
+      `<td>${o.techCount}${o.techLoad ? ' <span style="color:var(--muted);font-size:0.8em">+' + o.techLoad.toFixed(2) + '</span>' : ''}</td>` +
+      `<td style="text-align:left;font-size:0.85rem">${byYear || '-'}</td></tr>`;
+  }).join('');
+  document.getElementById('debriefOTable').innerHTML =
+    `<table class="debrief-table"><thead><tr><th>Team</th><th>Herd sires owned</th><th>Hands</th>` +
+    `<th>Mean exploited</th><th>Worst year</th><th>Realised at worst</th><th>Stockmanship</th>` +
+    `<th>Tech (load)</th><th style="text-align:left">Exploited by year</th></tr></thead>` +
+    `<tbody>${trs}</tbody></table>`;
 }
 
 function renderBidTable(teams, bulls, bids, rankOf) {
@@ -1688,6 +1796,7 @@ async function renderDebrief() {
   const rankOf = computeTrueRank(teams, finalWorld);
   const cashRankOf = computeCashRank(teams);
 
+  renderOTable(teams, rankOf);
   renderBidTable(teams, bulls, bids, rankOf);
   renderBridgeTable(teams, bulls, rankOf);
   renderEquityTable(teams, finalWorld, rankOf, cashRankOf);

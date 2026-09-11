@@ -344,8 +344,13 @@
   <section id="secStandings" style="display:none">
     <h2>Standings</h2>
     <div class="card">
+      <div style="font-size:0.82rem;color:var(--muted);margin-bottom:0.7rem;line-height:1.45">
+        Two rankings, and they are not the same race. <b>Scorecard</b> measures every outfit
+        against its own strategy's weights, which is what the game actually scores.
+        <b>Cash</b> is the bank balance. Leading one and trailing the other is normal.
+      </div>
       <table id="tblStandings">
-        <thead><tr><th>Rank</th><th>Team</th><th>Cash</th><th>Bar</th></tr></thead>
+        <thead><tr><th>Scorecard</th><th>Cash</th><th>Team</th><th>Cash</th><th>Bar</th></tr></thead>
         <tbody id="tbodyStandings"></tbody>
       </table>
     </div>
@@ -355,7 +360,7 @@
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=618994bff3"></script>
+<script src="engine.js?v=ac44d7bd8c"></script>
 <script src="recap.js?v=67b2825eaf"></script>
 <!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
 <script src="assets/bulls/manifest.js?v=2"></script>
@@ -2160,7 +2165,7 @@ async function showResults(world) {
   html += `<div style="font-size:0.78rem;color:var(--muted);margin-top:0.6rem">Waiting for the instructor to advance to the next year.</div>`;
 
   document.getElementById('cardWon').innerHTML = html;
-  // end-of-game debriefs (C1 winner's curse, D1 robustness). Appended after the main
+  // end-of-game debriefs (C1 value-and-fit, D1 robustness). Appended after the main
   // render so the yearly resolve path stays synchronous and fast.
   if (PHASE === 'ended') {
     const extra = (await winnersCurseDebrief(nameById)) + robustnessReplay(st, world) + exitSurveyHtml();
@@ -2170,7 +2175,11 @@ async function showResults(world) {
   // slow paint could re-show this section on a newer phase's screen
 }
 
-// ---- C1: winner's-curse debrief (reads every sold lot's revealed TRUE traits) ----
+// ---- C1: what you paid vs what you got (reads every sold lot's revealed TRUE traits) ----
+// Reframed 9/10 from a winner's-curse panel to a VALUE panel: catalog and truth correlate
+// at r = 0.987 once the five traits are averaged, so calling it a curse told students the
+// money was in reading the catalog. It is not. It is in fit, and in being organised to
+// use what you bought.
 // The curse: the winning bidder is the one who most overestimated a common value they
 // could not fully read. Catalog $Beef is the estimate every bidder saw; True $Beef is
 // what the bull actually was. A negative surprise on a lot you paid up for is the curse.
@@ -2205,13 +2214,14 @@ async function winnersCurseDebrief(nameById) {
     ? `You watched <b>${rivalWho}</b> pay <b style="font-family:var(--mono)">$${Math.round(Number(rivalTop.price)).toLocaleString()}</b> for ${esc(rivalTop.name || rivalTop.sire)} in year ${rivalTop.year} and could not tell why. That is what a competitor sees looking at Hermes: the outcome is public, the reason is not. The standings below now reveal every outfit's objective. Could you have told from the bidding alone which outfit ran which objective? Where did you guess a rival's reason and get it wrong?`
     : `Every lot a rival won was bought for a reason you could not see from the price. That is what a competitor sees looking at Hermes: the outcome is public, the reason is not. The standings below now reveal every outfit's objective. Could you have told from the bidding alone which outfit ran which objective?`;
   const avg = myN ? (mySurprise / myN) : 0;
-  const verdict = !myN ? 'You bought no bulls at auction, so the curse never had a chance to bite.'
-    : avg <= -4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won ($${Math.round(mySpend).toLocaleString()}), the true genetics averaged <b style="color:#d99079">${avg.toFixed(0)} $Beef below</b> the catalog. That is the winner\'s curse: you tended to win the lots you most overvalued.`
-    : avg >= 4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won, the true genetics averaged <b style="color:#acc87a">+${avg.toFixed(0)} $Beef above</b> catalog. You read the sale well and were not cursed.`
-    : `On the ${myN} bull${myN > 1 ? 's' : ''} you won, true genetics landed within ${Math.abs(avg).toFixed(0)} $Beef of the catalog on average. You paid close to fair value.`;
+  const verdict = !myN ? 'You bought no bulls at auction, so there is nothing here to read.'
+    : avg <= -4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won ($${Math.round(mySpend).toLocaleString()}), the true genetics averaged <b style="color:#d99079">${avg.toFixed(0)} $Beef below</b> the catalog. That is the winner\'s catalog read a little rich on the lots you took home.`
+    : avg >= 4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won, the true genetics averaged <b style="color:#acc87a">+${avg.toFixed(0)} $Beef above</b> catalog. The lots you took home ran better than advertised.`
+    : `On the ${myN} bull${myN > 1 ? 's' : ''} you won, true genetics landed within ${Math.abs(avg).toFixed(0)} $Beef of the catalog on average. The catalog described your bulls well.`;
   return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
-    `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">Winner's-Curse Debrief</div>` +
+    `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">What You Paid and What You Got</div>` +
     `<div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.6rem">${verdict}</div>` +
+    `<div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.6rem">Surprises here are small on purpose. The catalog describes the animal well. The money in this sale rode on which traits your country and your strategy could use, and on whether you were staffed to put those genetics to work.</div>` +
     `<div id="debriefAmbiguity" style="font-size:0.8rem;color:var(--text);border-left:3px solid var(--sage);padding:0.4rem 0.7rem;margin-bottom:0.7rem;background:var(--surface)">` +
     `<span style="font-family:var(--mono);font-size:0.66rem;color:var(--sage);letter-spacing:0.08em;text-transform:uppercase">Debrief question, causal ambiguity</span><br>${ambiguityQ}</div>` +
     `<div style="overflow-x:auto"><table style="width:100%;font-size:0.8rem"><thead><tr>` +
@@ -2441,13 +2451,60 @@ function cattlemensWeekly(w, bulls, teams, myState, nameById, yr) {
 }
 
 // ---- Standings ----
+// Dual rank (Steven 9/10). The standings used to be a pure cash sort, and on 9/08 the room
+// played a cash race all night while the game scored something else. These two helpers are
+// the team-page twins of admin.html's computeTrueRank/computeCashRank; both pages read the
+// same RanchEngine.scoreGame, so the projector and the team screens cannot disagree.
+function standingsScoreRank(teams, world) {
+  const bust = t => !!(t && t.state && t.state.busted);
+  const scoreable = teams.filter(t => t.state && !bust(t));
+  const rankOf = {};
+  if (world && scoreable.length) {
+    try {
+      const scores = RanchEngine.scoreGame(scoreable.map(t => reviveState(t.state)), world);
+      scoreable.map((t, i) => ({ t, score: scores[i] }))
+        .sort((a, b) => b.score - a.score)
+        .forEach((x, i) => { rankOf[x.t.id] = i + 1; });
+    } catch (e) {
+      // never let a scoring hiccup blank the standings mid-class; cash order still renders
+      console.warn('scoreGame failed, standings fall back to cash order', e);
+    }
+  }
+  let next = Object.keys(rankOf).length + 1;
+  teams.filter(t => rankOf[t.id] === undefined)
+    .sort((a, b) => {
+      const ab = bust(a) ? 1 : 0, bb = bust(b) ? 1 : 0;
+      if (ab !== bb) return ab - bb;
+      return (b.state ? reviveState(b.state).cash : 0) - (a.state ? reviveState(a.state).cash : 0);
+    })
+    .forEach(t => { rankOf[t.id] = next++; });
+  return rankOf;
+}
+function standingsCashRank(teams) {
+  const bust = t => !!(t && t.state && t.state.busted);
+  const rankOf = {};
+  [...teams].sort((a, b) => {
+    const ab = bust(a) ? 1 : 0, bb = bust(b) ? 1 : 0;
+    if (ab !== bb) return ab - bb;
+    return (b.state ? reviveState(b.state).cash : 0) - (a.state ? reviveState(a.state).cash : 0);
+  }).forEach((t, i) => { rankOf[t.id] = i + 1; });
+  return rankOf;
+}
+
 async function refreshStandings() {
-  const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
-  const rows = (teams || []).map(t => {
+  const [{ data: teams }, { data: gRow }] = await Promise.all([
+    supa.from('teams').select('*').eq('game_id', GAME_ID),
+    supa.from('games').select('world').eq('id', GAME_ID).single(),
+  ]);
+  const all = teams || [];
+  const scoreRankOf = standingsScoreRank(all, gRow && gRow.world);
+  const cashRankOf = standingsCashRank(all);
+  const rows = all.map(t => {
     const st = t.state ? reviveState(t.state) : null;
     return { name: t.name, cash: st ? Math.round(st.cash) : 0, isMe: t.id === TEAM_ID, arch: t.archetype,
+             scoreRank: scoreRankOf[t.id], cashRank: cashRankOf[t.id],
              busted: st && st.busted ? st.busted.year : 0 };
-  }).sort((a, b) => (a.busted ? 1 : 0) - (b.busted ? 1 : 0) || b.cash - a.cash);
+  }).sort((a, b) => (a.busted ? 1 : 0) - (b.busted ? 1 : 0) || (a.scoreRank || 99) - (b.scoreRank || 99));
   // objective reveal: only once the game has ended (objectives stay secret while it runs)
   const reveal = PHASE === 'ended';
   const maxCash = Math.max(...rows.map(r => r.cash), 1);
@@ -2459,7 +2516,10 @@ async function refreshStandings() {
     tr.style.fontWeight = r.isMe ? 'bold' : '';
     const archTag = reveal ? ` <span class="reveal-arch" style="font-family:var(--mono);font-size:0.68rem;color:var(--tan);letter-spacing:0.04em">ran ${esc(RanchEngine.ARCHETYPES[r.arch]?.label || r.arch || '?')}</span>` : '';
     const bustTag = r.busted ? ` <span style="font-family:var(--mono);font-size:0.68rem;color:#d99079;letter-spacing:0.04em">busted yr ${r.busted}</span>` : '';
-    tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.name)}${r.isMe ? ' (you)' : ''}${archTag}${bustTag}</td>` +
+    const split = (r.scoreRank && r.cashRank && r.scoreRank !== r.cashRank);
+    tr.innerHTML = `<td><b>${r.scoreRank || '-'}</b></td>` +
+      `<td${split ? ' style="color:#d99079;font-weight:bold"' : ''}>${r.cashRank || '-'}</td>` +
+      `<td>${esc(r.name)}${r.isMe ? ' (you)' : ''}${archTag}${bustTag}</td>` +
       `<td>${r.busted ? '-' : '$' + r.cash.toLocaleString()}</td>` +
       `<td><span class="lb-bar" style="width:${r.busted ? 2 : barW}px"></span></td>`;
     tbody.appendChild(tr);

@@ -318,11 +318,37 @@ const CULL_FOCUS_AI = {
   family_survival: 'fertility', conservative: 'fertility', rapid_expansion: 'fertility',
   cost_leader: 'disposition', passive: null,
 };
+// ---------- tacit stockmanship: the I column (Grant, Kogut & Zander, Nonaka) ----------
+// cullYears is a stock, but a forgiving one: it accrues cumulatively and switching focus
+// costs nothing, so it is closer to a purchase than to know-how. Tacit knowledge is the
+// opposite. It is built only by doing ONE thing consistently, it is lost when you chop and
+// change, and -- the part that matters for VRIO's I -- it is the ONE asset in this game
+// that cannot be bought, sold, co-funded or traded. Bulls, semen straws, tech and cash all
+// move between outfits through executeDeal. Stockmanship never appears there, because a
+// crew's feel for its own cattle does not transfer with a bill of sale.
+const TACIT_GAIN   = 0.28;  // per year of staying on the same focus, on the gap to 1.0
+const TACIT_KEEP   = 0.35;  // what survives a switch: chopping and changing costs most of it
+const TACIT_EFFECT = 0.60;  // how much a full book of know-how amplifies the chosen focus
+function tacitLevel(r) { return clamp(r.tacit || 0, 0, 1); }
+// multiplier applied to whichever focus benefit the outfit is actually running
+function tacitMult(r) { return 1 + TACIT_EFFECT * tacitLevel(r); }
+// call once per year, AFTER this year's focus is set and BEFORE the benefits are read
+function accrueTacit(r) {
+  const f = cullFocus(r);
+  if (f && r.tacitFocus === f) {
+    r.tacit = clamp(tacitLevel(r) + TACIT_GAIN * (1 - tacitLevel(r)), 0, 1);
+  } else {
+    r.tacit = tacitLevel(r) * TACIT_KEEP;   // switched, or running no focus at all
+    r.tacitFocus = f;
+    if (f) r.tacit = clamp(r.tacit + TACIT_GAIN * (1 - r.tacit), 0, 1); // this year still counts
+  }
+}
 function cullFocus(r) { return CULL_FOCUS[r.cullFocus] ? r.cullFocus : null; }
 function cullYears(r, key) { return (r.cullYears && r.cullYears[key]) || 0; }
 // disposition: quiet cattle need fewer hands (applies to the management crew and the day crew)
 function dispositionSave(r) {
-  return Math.min(cullYears(r, 'disposition'), CULL_FOCUS.disposition.cap) * CULL_FOCUS.disposition.hands;
+  return Math.min(cullYears(r, 'disposition'), CULL_FOCUS.disposition.cap)
+         * CULL_FOCUS.disposition.hands * (cullFocus(r) === 'disposition' ? tacitMult(r) : 1);
 }
 
 // ---------- replacement-female market (A1 buy side; fixed-price offer board) ----------
@@ -465,12 +491,19 @@ const SHOCKS = [
 ];
 
 // tech shelf (capex, labor saving at full fit, drought mitigation)
+// mgmtLoad (9/10): a tool saves DAY labour and costs MANAGEMENT. laborSave already cut the
+// crew's hours; mgmtLoad is the standing burden of actually running the thing -- calibrating
+// it, reading what it produces, acting on it. This is Hagiu & Wright's test as a mechanic:
+// the resource is a pile until the outfit is organised to learn from it, so genomic (the
+// data resource, and the one whose whole value IS the data it generates) carries the
+// heaviest load and saves no labour at all. It is also what keeps the O column binding
+// LATE: bull rosters cap out and retire, but tech only ever accumulates.
 const TECHS = {
-  water:   { capex: 40000, laborSave: 0.05, droughtMitigation: 0.45 },
-  vfence:  { capex: 28000, laborSave: 0.35, droughtMitigation: 0.25 },
-  dogs:    { capex: 8000,  laborSave: 0.15, droughtMitigation: 0.0  },
-  drone:   { capex: 14000, laborSave: 0.20, droughtMitigation: 0.0  },
-  genomic: { capex: 12000, laborSave: 0.0,  droughtMitigation: 0.0  },
+  water:   { capex: 40000, laborSave: 0.05, mgmtLoad: 0.15, droughtMitigation: 0.45 },
+  vfence:  { capex: 28000, laborSave: 0.35, mgmtLoad: 0.25, droughtMitigation: 0.25 },
+  dogs:    { capex: 8000,  laborSave: 0.15, mgmtLoad: 0.10, droughtMitigation: 0.0  },
+  drone:   { capex: 14000, laborSave: 0.20, mgmtLoad: 0.25, droughtMitigation: 0.0  },
+  genomic: { capex: 12000, laborSave: 0.0,  mgmtLoad: 0.40, droughtMitigation: 0.0  },
 };
 const WAGE_BASE = 39000;
 const WAGE_DRIFT = 0.036;
@@ -486,6 +519,24 @@ const HANDS_PER_COW = 1 / 350;
 const HAND_WAGE = 29000;      // one hired hand's annual payroll, base
 const HANDS_PER_BULL = 0.75;  // management capacity an active bull requires
 const UTIL_K = 1.5;           // utilization exponent: how sharply understaffing bites
+// Dierickx & Cool 1989 (Week 3 corpus): asset STOCKS are accumulated, not bought, and
+// compressing the spend into one year buys less than the same spend spread over years --
+// time compression diseconomies. A bull bought this season has had one breeding season;
+// one owned three years has daughters in production. Weighting each bull's genetic
+// contribution by TENURE makes four bulls in year 1 worth much less than one a year for
+// four years, which is the whole point and also demotes the auction splurge without
+// touching the auction.
+const TENURE_FLOOR = 0.40;    // a bull's contribution in the season he is bought
+const TENURE_STEP  = 0.30;    // per additional year owned, to a ceiling of 1.0
+// Tenure alone did NOT flip it (measured: splurge still won 59.5% of paired runs). Four
+// bulls bought at once saturate the coverage clamp in year 1 and stay saturated, so the
+// purchase-year discount washes out. The binding constraint D&C actually describe is
+// INTEGRATION: a breeding program can only absorb so much new genetics in one season --
+// evaluating sires, matching them to cow groups, keeping the records. So the penalty
+// attaches to the SAME-YEAR COHORT and persists for the life of those bulls. A cohort of
+// k bought together each count 1/(1 + CROWD*(k-1)): buy four at once and the cohort is
+// worth 1.6 bulls; buy one a year for four years and they are worth 4.
+const CROWD_PENALTY = 0.35;
 
 // starting crew scales with ranch size, then with the archetype's built-in labor culture
 // (handsMult on ARCHETYPES; unset = 1.0). Two archetypes start hands-rich/cash-poor
@@ -509,10 +560,20 @@ function hireCost(r, w) { return Math.round(HAND_WAGE * w.wageRatchet * REGIONS[
 // operating-labor cost above already uses, so a tech buy pays double duty)
 function handsRequired(r, w) {
   const activeN = r.bulls.filter(b => w.year - b.boughtYear < 4).length;
-  let save = 0;
-  for (const t of r.tech) save += TECHS[t].laborSave;
-  return activeN * HANDS_PER_BULL * (1 - clamp(save, 0, 0.55)) * (1 - dispositionSave(r));
+  let save = 0, load = 0;
+  for (const t of r.tech) { save += TECHS[t].laborSave; load += TECHS[t].mgmtLoad || 0; }
+  // the tech load is NOT discounted by laborSave: a tool cannot manage itself
+  return activeN * HANDS_PER_BULL * (1 - clamp(save, 0, 0.55)) * (1 - dispositionSave(r)) + load;
 }
+// years this bull has been in the pasture, as a contribution weight (Dierickx & Cool)
+function tenureW(b, w) { return clamp(TENURE_FLOOR + TENURE_STEP * (w.year - b.boughtYear), TENURE_FLOOR, 1); }
+// how many herd sires arrived in the SAME season as this one; a crowded intake is
+// integrated worse and stays that way
+function cohortW(b, active) {
+  const k = active.filter(x => x.boughtYear === b.boughtYear).length;
+  return 1 / (1 + CROWD_PENALTY * Math.max(0, k - 1));
+}
+function stockW(b, w, active) { return tenureW(b, w) * cohortW(b, active); }
 function utilization(r, w) {
   const req = handsRequired(r, w);
   return req <= 0 ? 1 : clamp(r.hands / req, 0, 1);
@@ -541,7 +602,13 @@ const ARCHETYPES = {
   },
   elite_genetics: {
     label: 'Elite Genetics',
-    kpi: { genetics: 0.40, premium: 0.30, rep: 0.15, cash: 0.15 },
+    // 9/10: rep DROPPED and costEff added. elite_genetics and seedstock used to be the
+    // same four terms reweighted (genetics/premium/rep/cash), contesting 85-90% of one
+    // space, which is why seedstock absorbed 38-41% of any share elite_genetics vacated.
+    // Split by identity: this is a COMMERCIAL herd chasing the genetic ceiling for its own
+    // cattle, so better genetics show up as feed conversion (costEff), not as a selling
+    // reputation. Reputation belongs to the outfit whose product is breeding stock.
+    kpi: { genetics: 0.45, premium: 0.25, costEff: 0.15, cash: 0.15 },
     traitVal: { ce: 1.0, growth: 0.6, marb: 1.8, forage: 0.4, milk: 0.8 },
     shade: 0.85, bidCashCap: 0.55, expandRate: 0.05, debtCap: 0.35, estNoise: 0.15, handsMult: 0.6,
     marketing: 'premium', techRule: (fit, t) => t === 'genomic' || fit >= 1.4,
@@ -563,15 +630,38 @@ const ARCHETYPES = {
   family_survival: {
     label: 'Family Survival',
     // survival is herd CONTINUITY and cost discipline, not growth (growth was a
-    // free KPI for cash-rich small buyers in the ranch market)
-    kpi: { resilience: 0.40, lowDebt: 0.25, cash: 0.15, costEff: 0.20 },
+    // free KPI for cash-rich small buyers in the ranch market).
+    // 9/10: that removal left the vector with NO action term at all -- resilience, lowDebt,
+    // cash and costEff are every one of them maximized by not acting, and the default-board
+    // check measured this archetype's win share MORE THAN DOUBLING under passive play
+    // (9.8% -> 22.9%, reproduced on two RNG draws with all six gates passing). genetics is
+    // the action term added instead of restoring herdGrowth: improving the cattle takes
+    // bull purchases, semen and a cull focus, and unlike growth it is not handed to a
+    // cash-rich buyer by the ranch market, so it does not reopen the problem growth caused.
+    // ATTEMPT 2. genetics alone did not do it: the default-board seat still went
+    // 10.6% -> 22.4%, because this archetype barely acts even when it IS active
+    // (bidCashCap 0.10, expandRate 0.08), so genetics does not separate the two states
+    // for it. herdGrowth does, and by a wide margin: measured 0.97 when the AI plays its
+    // policy against roughly 0.2 when the herd just sits at herd0. That is the whole
+    // point of an action term. cash is dropped (measured 0.11, contributing 0.017, dead
+    // weight). The old warning above still stands and is why the weight is 0.20 and not
+    // more: growth is cheap for a cash-rich buyer of a small ranch, so it earns a share
+    // of the vector, not the vector.
+    kpi: { resilience: 0.35, lowDebt: 0.20, costEff: 0.15, herdGrowth: 0.15, genetics: 0.15 },
     traitVal: { ce: 1.3, growth: 0.8, marb: 0.4, forage: 1.5, milk: 1.1 },
     shade: 0.72, bidCashCap: 0.10, expandRate: 0.08, debtCap: 0.10, leanOps: 0.90, handsMult: 1.5, // family labor, no hired crew
     marketing: 'volume', techRule: (fit, t) => (t === 'water' && fit >= 1.0) || (t === 'dogs' && fit >= 1.2),
   },
   seedstock: {
     label: 'Seedstock / Reputation',
-    kpi: { rep: 0.40, premium: 0.30, genetics: 0.20, cash: 0.10 },
+    // 9/10: the other half of the elite_genetics split above. rep is now the term ONLY
+    // this archetype weights, so it carries the identity: half the score sits in the
+    // market's view of the program, which is what a seedstock outfit actually sells.
+    // genetics demoted 0.20 -> 0.15 so it no longer contests elite_genetics' home ground.
+    // herdGrowth was tried here first and rejected on measurement, not taste: seedstock
+    // already scores 0.94 on it without weighting it, so the weight was nearly free points
+    // and G1 blew out to 36%. Same free-KPI trap the family_survival comment below records.
+    kpi: { rep: 0.50, premium: 0.25, genetics: 0.15, cash: 0.10 },
     traitVal: { ce: 1.0, growth: 0.8, marb: 1.4, forage: 0.6, milk: 1.0 },
     shade: 0.90, bidCashCap: 0.50, expandRate: 0.05, debtCap: 0.30, estNoise: 0.15, handsMult: 0.6,
     marketing: 'premium', techRule: (fit, t) => t === 'genomic' || fit >= 1.3,
@@ -686,6 +776,7 @@ function makeRanch(key, l) {
     landCap: l.landCap, rosterCap,
     hands: startingHands(l, key), handsPending: 0,
     cullFocus: null, cullYears: { fertility: 0, structure: 0, genetics: 0, disposition: 0 },
+    tacit: 0, tacitFocus: null,
     peakEquity: 0, maxDrawdown: 0, totalCost: 0, totalLbs: 0, premSum: 0, premN: 0,
     revHist: [], semenRoyalty: 0, lastStmt: null,
     cashLog: { cows: 0, semen: 0, deals: 0, tech: 0, bulls: 0 },
@@ -819,7 +910,8 @@ function cowCost(r, w) {
   c *= (1 + feedBump * 0.6);
   if (w.shock === 'cheap_feed') c *= 0.88;
   // structure culling: sound feet, legs and udders mean fewer replacements and less vet
-  c *= (1 - Math.min(cullYears(r, 'structure'), CULL_FOCUS.structure.cap) * CULL_FOCUS.structure.cowCost);
+  c *= (1 - Math.min(cullYears(r, 'structure'), CULL_FOCUS.structure.cap) * CULL_FOCUS.structure.cowCost
+            * (cullFocus(r) === 'structure' ? tacitMult(r) : 1));
   return c;
 }
 function laborCost(r, w) {
@@ -854,7 +946,9 @@ function productionYear(r, w) {
   const focus = r.key === 'passive' ? null : cullFocus(r);
   if (!r.cullYears) r.cullYears = { fertility: 0, structure: 0, genetics: 0, disposition: 0 };
   if (focus) r.cullYears[focus] = (r.cullYears[focus] || 0) + 1;
-  const fertBonus = Math.min(cullYears(r, 'fertility'), CULL_FOCUS.fertility.cap) * CULL_FOCUS.fertility.rate;
+  accrueTacit(r); // build or lose stockmanship BEFORE this year's focus benefits are read
+  const fertBonus = Math.min(cullYears(r, 'fertility'), CULL_FOCUS.fertility.cap) * CULL_FOCUS.fertility.rate
+                    * (cullFocus(r) === 'fertility' ? tacitMult(r) : 1);
   let rate = 0.88 + (r.g.ce - 5) * 0.004 - sev * 0.06 + fertBonus;
   if (sev > 0.7 && r.tech.has('drone') && REGIONS[r.region].tech.drone >= 1.2) rate += sev * 0.018;
   const calves = r.herd * clamp(rate, 0.6, 0.97);
@@ -941,7 +1035,7 @@ function productionYear(r, w) {
   // cull intensity into a real long-horizon genetics lever, and it offsets the unimproved
   // slide below so a hard-culling herd climbs even with no bull in the pasture.
   if (r.key !== 'passive') {
-    const cg = focus === 'genetics' ? CULL_FOCUS.genetics.gain : CULL.normal.gain;
+    const cg = focus === 'genetics' ? CULL_FOCUS.genetics.gain * tacitMult(r) : CULL.normal.gain;
     TRAITS.forEach(t => { if (r.g[t] < CULL_CEIL) r.g[t] += (CULL_CEIL - r.g[t]) * cg; });
   }
   const active = r.bulls.filter(b => w.year - b.boughtYear < 4);
@@ -954,10 +1048,17 @@ function productionYear(r, w) {
   // to teach. A fully-staffed ranch (util=1) sees no penalty at all.
   const util = utilization(r, w);
   const utilFactor = Math.pow(util, UTIL_K);
+  // effective stock, not head count: see TENURE_FLOOR/TENURE_STEP above
+  const tenureSum = active.reduce((acc, b) => acc + stockW(b, w, active), 0) || 1;
   if (active.length || usableSemen) {
     TRAITS.forEach(t => {
       let pull = 0, wgt = 0;
-      if (active.length) { const bAvg = avg(active.map(b => b.truth[t])); const cw = clamp(cov * active.length, 0.1, 0.8) * utilFactor; pull += (bAvg - r.g[t]) * cw; wgt += cw; }
+      if (active.length) {
+        // tenure-weighted: both WHICH bulls the herd blends toward and HOW HARD it pulls
+        const bAvg = active.reduce((acc, b) => acc + b.truth[t] * stockW(b, w, active), 0) / tenureSum;
+        const cw = clamp(cov * tenureSum, 0.1, 0.8) * utilFactor;
+        pull += (bAvg - r.g[t]) * cw; wgt += cw;
+      }
       if (usableSemen) { const sw = SEMEN.coverage * usableSemen.conception * (r.tech.has('genomic') ? 2 : 1); pull += (usableSemen.truth[t] - r.g[t]) * sw; wgt += sw; }
       // selection focus: breeders pull hardest on the traits their strategy values
       const focus = 0.5 + (r.a.traitVal[t] || 1) / 2;
@@ -974,6 +1075,9 @@ function productionYear(r, w) {
     const bAvgTraits = {}; TRAITS.forEach(t => bAvgTraits[t] = avg(active.map(b => b.truth[t])));
     utilPenalty = bullYearValue(r, w, bAvgTraits, cov) * (1 - utilFactor);
   }
+  // per-year trace: the debrief's "resources owned vs resources exploited" panel reads it,
+  // and it is how we check the O gate still binds late instead of being a startup cost
+  (r.utilHist = r.utilHist || []).push(+util.toFixed(3));
   r.lastStmt.utilization = util;
   r.lastStmt.hands = r.hands;
   r.lastStmt.handsReq = handsRequired(r, w);
@@ -1037,7 +1141,12 @@ function decideYear(r, w) {
     const activeNow = r.bulls.filter(b => w.year - b.boughtYear < 4).length;
     const roomLeft = r.rosterCap - activeNow;
     const plannedActive = Math.min(r.rosterCap, activeNow + (a.bidCashCap > 0 && roomLeft > 0 ? 1 : 0));
-    const reqNext = plannedActive * HANDS_PER_BULL;
+    // mirror handsRequired, tech management load included, or the bots chronically
+    // under-hire as they accumulate tech and the gates fail on bot behaviour, not balance
+    let techSave = 0, techLoad = 0;
+    for (const t of r.tech) { techSave += TECHS[t].laborSave; techLoad += TECHS[t].mgmtLoad || 0; }
+    const reqNext = plannedActive * HANDS_PER_BULL * (1 - clamp(techSave, 0, 0.55))
+                    * (1 - dispositionSave(r)) + techLoad;
     const gap = Math.max(0, Math.ceil(reqNext - r.hands));
     const canAfford = r.cash > hireCost(r, w) * 2.5; // keep a payroll buffer before committing
     setHire(r, gap > 0 && canAfford ? gap : 0);
