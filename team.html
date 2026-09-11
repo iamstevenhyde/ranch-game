@@ -1662,22 +1662,16 @@ async function submitPlay() {
     msg('Give a one-line rationale for this year\'s plan (3-280 characters) before locking in.', 'err');
     return;
   }
-  const gateInputs = [...document.querySelectorAll('#bullCards input[type=number]')];
-  const bidRationales = {};
-  for (const inp of gateInputs) {
-    const bullId = inp.id.replace('bid_', '');
-    const amt = Number(inp.value);
-    const anchor = Number(inp.getAttribute('data-anchor')) || 0;
-    if (amt > 0 && anchor > 0 && amt > anchor * 2) {
-      const rEl = document.getElementById('bidRationale_' + bullId);
-      const text = (rEl ? rEl.value : '').trim();
-      if (text.length < 3 || text.length > 280) {
-        msg('That bid is over 2x anchor: give a one-line reason (3-280 characters) for that bull before locking in.', 'err');
-        return;
-      }
-      bidRationales[bullId] = { text, amount: amt, anchor, ratio: amt / anchor };
-    }
-  }
+  // The per-bid reason gate is GONE (Steven 9/10, after playing a year as a student:
+  // "that is too much"). It was specified to fire on bids over 2x anchor, on the
+  // assumption that 2x was unusual. It is not: measured against the real 9/08 class bids
+  // it fired on 66 of 88 human bids, 75% of everything anyone typed, and The Ranch Club
+  // alone would have written 19 separate reasons across the game on top of its five plan
+  // rationales. The median human bid that night was 9x to 14x anchor, so the threshold was
+  // off by roughly an order of magnitude. Do not reintroduce this without checking the bid
+  // distribution first; even a 10x threshold still fires on half of all bids.
+  // The one-line PLAN rationale above stays: one sentence per team per year, five a game.
+  // What was bid is still fully logged in the bids table, so only the typed why is gone.
 
   document.getElementById('btnLockYear').disabled = true;
   try {
@@ -1728,10 +1722,6 @@ async function submitPlay() {
     await logDecision('rationale_lockin',
       { text: rationaleText, year: CUR_YEAR, herd: boardChoice.herd, cull: boardChoice.cull,
         debt: boardChoice.debt, techs: boardChoice.techs, bids: upserts.length });
-    for (const [bullId, info] of Object.entries(bidRationales)) {
-      await logDecision('rationale_bid',
-        { text: info.text, bull_id: bullId, amount: info.amount, anchor: info.anchor, ratio: info.ratio });
-    }
 
     const warn = overCash ? ' Note: a bid tops your cash, so winning it would force a fire sale.' : '';
     msg('Year locked: ' + r.herd.toLocaleString() + ' head, $' + Math.round(r.cash).toLocaleString() + ' cash, ' + upserts.length + ' bid' + (upserts.length === 1 ? '' : 's') + '. Revise until the year resolves.' + warn, 'ok');
@@ -1758,10 +1748,6 @@ function updateBidConseq(bullId) {
   if (!el) return;
   const bidEl = document.getElementById('bid_' + bullId);
   const v = Number((bidEl || {}).value);
-  // rationale gate (Item 1): show the reason box once a bid tops 2x the bull's anchor
-  const anchor = Number((bidEl && bidEl.getAttribute('data-anchor')) || 0);
-  const rWrap = document.getElementById('bidRationaleWrap_' + bullId);
-  if (rWrap) rWrap.style.display = (v > 0 && anchor > 0 && v > anchor * 2) ? '' : 'none';
   if (v > 0) onboardStep('bid');
   if (!v) { el.textContent = ''; return; }
   const left = AUCTION_CASH - v;
@@ -1977,13 +1963,7 @@ function renderBullCards(bulls, world, st, bidMap) {
               (typed['bid_' + b.id] !== undefined ? ` value="${typed['bid_' + b.id]}"` : existing ? ` value="${Math.round(existing)}"` : '') + `>` +
             (existing ? ` <span class="submitted">Locked: $${Math.round(existing).toLocaleString()}</span>` : '') +
           `</div>` +
-          `<div id="conseq_${b.id}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem;min-height:1em"></div>` +
-          // rationale gate (Item 1): a bid over 2x anchor needs its own one-line reason,
-          // shown only when it applies (updateBidConseq toggles this on input)
-          `<div id="bidRationaleWrap_${b.id}" style="display:none;margin-top:0.3rem">` +
-            `<input type="text" id="bidRationale_${b.id}" maxlength="280" placeholder="This bid is over 2x anchor: one-line reason required to lock in"` +
-              (typed['bidRationale_' + b.id] !== undefined ? ` value="${esc(typed['bidRationale_' + b.id])}"` : '') + `>` +
-          `</div>`
+          `<div id="conseq_${b.id}" style="font-size:0.76rem;color:var(--dim);margin-top:0.3rem;min-height:1em"></div>`
       ) +
       `</div>`; // close the padded body opened after the photo plate
     container.appendChild(div);
