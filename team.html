@@ -1,177 +1,216 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>The Bull Market | Team</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="house.css">
+<script src="house.js"></script>
 <style>
-  /* Ranch Ledger palette (oiled leather, tan on near-black), matched to the-board.html */
+  /* Bull Market: the one world color. Sage, for the ranch; rust stays the action. */
+  :root { --world: #6f8352; }
+  /* Legacy token names the JS templates still write (var(--tan), var(--dim) ...), mapped
+     onto the house tokens so every inline style resolves on both themes. */
   :root {
-    --bg:      #1a1510;
-    --surface: #231d16;
-    --surface2:#2c2419;
-    --border:  #3a3028;
-    --text:    #e0d4bf;
-    --fg:      #e0d4bf;
-    --dim:     #ab9c82;
-    --muted:   #877a62;
-    --accent:  #bd7733;  /* bronze */
-    --rust:    #bd7733;
-    --tan:     #d8b784;
-    --sand:    #e0d4bf;  /* light text on dark surfaces */
-    --dusk:    #2c2419;  /* dark surface for headers/chips */
-    --sage:    #7f8f4a;  /* olive */
-    --sky:     #5f93a0;  /* denim-slate */
-    --mono:    'JetBrains Mono', monospace;
-    --serif:   'Fraunces', Georgia, serif;
+    --surface: var(--card); --surface2: var(--card2); --border: var(--line);
+    --text: var(--ink); --fg: var(--ink); --dim: var(--mute); --muted: var(--mute);
+    --accent: var(--ink); --tan: var(--ink); --sand: var(--ink); --dusk: var(--card2);
+    --sage: var(--mute); --sky: var(--ink); --warn: var(--ink);
+    --mono: var(--font-mono); --serif: var(--font-head);
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: 'Atkinson Hyperlegible', -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; -webkit-font-smoothing: antialiased; }
-  header { background: var(--surface2); color: var(--tan); padding: 0.85rem 1.2rem; display: flex; align-items: center; gap: 0.8rem; border-bottom: 2px solid var(--border); }
-  header h1 { font-family: var(--serif); font-size: 1.25rem; font-weight: 600; }
-  header .badge { font-size: 0.65rem; background: var(--accent); color: #1a1510; padding: 0.15rem 0.45rem; border-radius: 3px; font-family: var(--mono); letter-spacing: 0.08em; text-transform: uppercase; }
-  main { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem; }
+  /* the phase word in the header */
+  .round #phaseChip { text-transform: uppercase; }
   /* the year page is a wider control board; every other screen stays phone-narrow */
-  main.control { max-width: 900px; }
-  section { margin-bottom: 1.8rem; }
-  h2 { font-family: var(--mono); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.14em; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 0.9rem; }
-  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 5px; padding: 1rem 1.2rem; }
-  label { display: block; font-size: 0.8rem; color: var(--dim); margin-bottom: 0.25rem; }
-  input[type=text], input[type=number] { width: 100%; border: 1px solid var(--border); border-radius: 4px; padding: 0.5rem 0.7rem; font-family: var(--mono); font-size: 1rem; background: var(--surface2); color: var(--text); margin-bottom: 0.8rem; }
-  button { background: var(--accent); color: #1a1510; border: none; padding: 0.5rem 1.1rem; border-radius: 4px; font-family: inherit; font-weight: 700; font-size: 0.9rem; cursor: pointer; }
-  button:hover { background: #a5651f; }
-  button:disabled { background: #4a4034; color: #877a62; cursor: default; }
-  button.secondary { background: var(--sage); color: #12160a; }
-  #msg { position: fixed; top: 0.6rem; left: 50%; transform: translateX(-50%); z-index: 1000; max-width: 92vw; padding: 0.55rem 1rem; border-radius: 6px; font-size: 0.9rem; display: none; box-shadow: 0 6px 20px rgba(0,0,0,0.45); }
-  #msg.ok  { background: #26301a; color: #acc87a; display: block; border: 1px solid #3c4a26; }
-  #msg.err { background: #351d18; color: #d99079; display: block; border: 1px solid #5a3128; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
-  th { background: var(--surface2); color: var(--tan); text-align: left; padding: 0.4rem 0.6rem; font-family: var(--mono); font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; }
-  td { padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--border); vertical-align: top; }
-  tr:last-child td { border-bottom: none; }
-  .tag { display: inline-block; padding: 0.12rem 0.4rem; border-radius: 3px; font-size: 0.68rem; font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.04em; }
-  .tag-elite      { background: #3a2c10; color: #e8b84a; border: 1px solid #6a521c; }
-  .tag-premium    { background: #2c2440; color: #b39ad8; border: 1px solid #4a3f6a; }
-  .tag-mid        { background: #16303a; color: #7fbdd0; border: 1px solid #2c5560; }
-  .tag-commercial { background: #2a2620; color: #b0a48c; border: 1px solid #443c30; }
-  .phase-chip { display: inline-block; padding: 0.18rem 0.65rem; border-radius: 12px; font-size: 0.72rem; background: var(--bg); color: var(--tan); font-family: var(--mono); border: 1px solid var(--border); margin-left: auto; }
-  .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-  .stat-box { background: var(--surface2); border: 1px solid var(--border); border-radius: 4px; padding: 0.6rem 0.8rem; }
-  .stat-label { font-size: 0.68rem; color: var(--dim); text-transform: uppercase; letter-spacing: 0.05em; }
-  .stat-val { font-size: 1.15rem; font-weight: 700; color: var(--accent); font-family: var(--mono); }
-  .epd-bar-wrap { display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; font-family: var(--mono); }
-  .epd-bar { height: 7px; border-radius: 3px; background: var(--sky); min-width: 2px; }
-  .range-note { font-size: 0.75rem; color: var(--dim); margin-top: 0.25rem; font-family: var(--mono); }
-  .bid-row { display: flex; gap: 0.6rem; align-items: center; margin-top: 0.4rem; }
-  .bid-row input { width: 130px; margin-bottom: 0; }
-  .submitted { color: var(--sage); font-size: 0.8rem; }
-  .lb-bar { display: inline-block; height: 7px; background: var(--accent); border-radius: 3px; min-width: 2px; }
+  main.play { width: 100%; max-width: 40rem; margin: 0 auto; }
+  main.play.control { max-width: 56rem; }
+  section { margin-bottom: var(--s5); }
+  section > h2 { font: 400 var(--t-1)/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); margin: 0 0 var(--s2); }
+  section > h2 span { text-transform: none; letter-spacing: 0; }
+  .card { overflow-x: auto; }
+  .card p:last-child { margin-bottom: 0; }
+  label { margin-bottom: var(--s1); }
+  input[type=text], input[type=number] { margin-bottom: var(--s3); }
+  input.code { margin-bottom: var(--s3); }
+  /* every bare button is a house button; the one rust action per screen carries .act */
+  main button:not(.opt):not(.techpill):not(.btn) {
+    font: 600 var(--t0)/1.2 var(--font-body); min-height: var(--touch); padding: var(--s2) var(--s4);
+    border: 1px solid var(--line2); border-radius: var(--r1); background: var(--card); color: var(--ink);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
+  }
+  main button:not(.opt):not(.techpill):not(.btn):hover { border-color: var(--ink); }
+  main button:disabled { opacity: .45; cursor: not-allowed; }
+  main button.secondary { border-color: transparent; background: transparent; color: var(--mute); }
+  /* toast */
+  #msg { position: fixed; left: 50%; bottom: calc(var(--s5) + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); z-index: 1000; max-width: min(92vw, 28rem);
+    padding: var(--s3) var(--s4); border-radius: var(--r1); font-weight: 600; display: none; background: var(--ink); color: var(--bg); box-shadow: var(--shadow); }
+  #msg.ok, #msg.err { display: block; }
+  /* tables that the play screens still carry: plain house table, scroll inside the card */
+  table { font-size: var(--t-1); }
+  th, td { padding: var(--s2) var(--s2); }
+  .tag { display: inline-block; font: 600 .6875rem/1.6 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 0 var(--s2); border: 1px solid var(--line2); border-radius: 999px; color: var(--mute); white-space: nowrap; }
+  .tag-elite { color: var(--ink); border-color: var(--ink); }
+  .stat.county .v { font-family: var(--font-body); font-size: var(--t0); font-weight: 600; }
+  .epd-grid { display: grid; grid-template-columns: 1fr; gap: 2px; }
+  .epd-bar-wrap { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-1); font-family: var(--font-mono); }
+  .epd-bar { height: .375rem; border-radius: 999px; background: var(--ink); min-width: 2px; }
+  .range-note { font-size: var(--t-1); color: var(--mute); margin-top: var(--s1); font-family: var(--font-mono); }
+  .bid-row { display: flex; gap: var(--s2); align-items: center; margin-top: var(--s2); }
+  .bid-row input { margin-bottom: 0; }
+  .submitted { color: var(--mute); font: var(--t-1)/1.3 var(--font-mono); }
+  .lb-bar { display: inline-block; height: .375rem; background: var(--ink); border-radius: 999px; min-width: 2px; }
   /* Board meeting */
-  .board-banner { border-radius: 5px; padding: 0.75rem 0.95rem; margin-bottom: 1rem; color: #fff; font-size: 0.9rem; line-height: 1.4; }
-  .board-banner .yr { font-family: var(--mono); font-size: 0.68rem; letter-spacing: 0.12em; text-transform: uppercase; opacity: 0.9; display: block; margin-bottom: 0.2rem; }
-  .board-top { display: grid; grid-template-columns: 168px 1fr; gap: 1rem; align-items: start; margin-bottom: 1rem; }
-  @media (max-width: 520px) { .board-top { grid-template-columns: 1fr; } }
-  .mini-map { background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 0.3rem; }
+  .board-banner { font-size: var(--t-1); color: var(--mute); margin-bottom: var(--s3); }
+  .board-banner .yr { font-family: var(--font-mono); letter-spacing: .08em; text-transform: uppercase; display: block; margin-bottom: 2px; }
+  .board-top { display: grid; grid-template-columns: 1fr; gap: var(--s4); align-items: start; margin-bottom: var(--s4); }
+  @media (min-width: 40rem) { .board-top { grid-template-columns: 12rem 1fr; } }
+  .dials { display: flex; gap: var(--s4); justify-content: space-around; margin: var(--s2) 0 var(--s3); }
+  .mini-map { background: var(--card2); border: 1px solid var(--line); border-radius: var(--r1); padding: var(--s1); }
   .mini-map svg { width: 100%; height: auto; display: block; }
-  .map-legend { font-size: 0.68rem; color: var(--dim); margin-top: 0.25rem; text-align: center; font-family: var(--mono); }
-  .mandate { font-size: 0.82rem; color: var(--text); background: var(--surface2); border-left: 3px solid var(--accent); padding: 0.5rem 0.7rem; border-radius: 0 4px 4px 0; margin-bottom: 0.7rem; }
-  .kpi-row { display: flex; align-items: center; gap: 0.5rem; font-size: 0.72rem; margin-bottom: 0.3rem; font-family: var(--mono); }
-  .kpi-row .kpi-name { width: 96px; color: var(--dim); flex-shrink: 0; text-transform: uppercase; letter-spacing: 0.03em; }
-  .kpi-track { flex: 1; height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
-  .kpi-fill { height: 100%; background: var(--sage); border-radius: 4px; }
-  .kpi-fill.pri { background: var(--accent); }
-  .dec-block { margin-bottom: 1.1rem; }
-  /* control board: decision levers laid out as a responsive grid. One column on a phone
-     (auto-fit collapses below the min track), two-plus columns on a tablet or projector. */
-  .control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(290px, 1fr)); gap: 0.2rem 1.5rem; align-items: start; }
-  .control-grid .dec-block { margin-bottom: 1rem; }
+  .map-legend { font-size: var(--t-1); color: var(--mute); margin-top: var(--s1); text-align: center; font-family: var(--font-mono); }
+  .mandate { font-size: var(--t0); background: var(--card2); border-left: 3px solid var(--ink); padding: var(--s2) var(--s3); border-radius: 0 var(--r1) var(--r1) 0; margin-bottom: var(--s3); }
+  .kpi-row { display: grid; grid-template-columns: minmax(4.5rem, auto) 1fr auto; gap: var(--s2); align-items: center; font-size: var(--t-1); margin-bottom: var(--s2); }
+  .kpi-row .kpi-name { color: var(--ink); white-space: nowrap; }
+  .kpi-row .kpi-val { font-family: var(--font-mono); color: var(--mute); text-align: right; white-space: nowrap; }
+  /* Countable pictograms for crew and herd (Steven 9/11): a count, not a ratio */
+  .pict-block { border: 1px solid var(--line); border-radius: var(--r1); padding: var(--s2) var(--s3); margin-top: var(--s2); background: var(--card); }
+  .pict-row { display: flex; align-items: center; gap: var(--s2); margin-bottom: var(--s1); }
+  .pict-row:last-child { margin-bottom: 0; }
+  .pict-label { width: 3.25rem; flex-shrink: 0; font: var(--t-1)/1.2 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; color: var(--mute); }
+  .pict-glyphs { flex: 1; display: flex; flex-wrap: wrap; align-items: flex-end; gap: 3px; min-width: 0; }
+  .glyph { display: block; flex-shrink: 0; color: var(--ink); }
+  .glyph.ghost { color: var(--line2); }
+  .glyph-part { position: relative; display: block; flex-shrink: 0; }
+  .glyph-part .glyph { position: absolute; left: 0; top: 0; }
+  .glyph-part .clip { position: absolute; left: 0; top: 0; overflow: hidden; }
+  .pict-val { flex-shrink: 0; text-align: right; font: var(--t-1)/1.2 var(--font-mono); color: var(--ink); }
+  .pict-note { font-size: var(--t-1); color: var(--mute); margin-top: 2px; }
+  .pict-note.short { color: var(--ink); font-weight: 700; }
+  .pict-key { font: .6875rem/1.3 var(--font-mono); color: var(--mute); margin-top: var(--s1); }
+  .dec-block { margin-bottom: var(--s4); }
+  .control-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr)); gap: var(--s2) var(--s5); align-items: start; }
   .dec-block.span2 { grid-column: 1 / -1; }
-  .ops-summary { background: var(--surface2); color: var(--sand); border: 1px solid var(--border); border-radius: 5px; padding: 0.7rem 0.95rem; font-size: 0.84rem; margin-top: 0.6rem; }
-  .ops-summary b { color: var(--tan); font-family: var(--mono); }
-  /* cow market rows: fixed-price offer board */
-  .cow-row { display: flex; align-items: center; gap: 0.6rem; border: 1px solid var(--border); border-radius: 5px; background: var(--surface2); padding: 0.5rem 0.65rem; margin-bottom: 0.4rem; }
+  .ops-summary { background: var(--card2); border: 1px solid var(--line); border-radius: var(--r1); padding: var(--s3) var(--s4); font-size: var(--t-1); margin-top: var(--s3); }
+  .ops-summary b { font-family: var(--font-mono); }
+  .cow-row { display: flex; align-items: center; gap: var(--s3); border: 1px solid var(--line); border-radius: var(--r1); background: var(--card2); padding: var(--s2) var(--s3); margin-bottom: var(--s2); }
   .cow-row .cow-info { flex: 1; min-width: 0; }
-  .cow-row .cow-t { font-weight: 700; font-size: 0.83rem; color: var(--text); }
-  .cow-row .cow-d { font-size: 0.72rem; color: var(--muted); font-family: var(--mono); margin-top: 0.1rem; }
-  .stepper { display: flex; align-items: center; gap: 0.35rem; flex-shrink: 0; }
-  .stepper button { width: 28px; height: 28px; padding: 0; font-size: 1rem; line-height: 1; border-radius: 4px; }
-  .stepper .qty { min-width: 20px; text-align: center; font-family: var(--mono); font-weight: 700; color: var(--tan); }
+  .cow-row .cow-t { font-weight: 700; }
+  .cow-row .cow-d { font: var(--t-1)/1.3 var(--font-mono); color: var(--mute); margin-top: 2px; }
+  .stepper { display: flex; align-items: center; gap: var(--s1); flex-shrink: 0; }
+  main .stepper button { width: 2.25rem; min-height: 2.25rem; padding: 0; }
+  .stepper .qty { min-width: 1.5rem; text-align: center; font-family: var(--font-mono); font-weight: 600; }
   /* co-opetition deals */
-  .deal-form { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem 0.8rem; align-items: end; background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: 0.75rem 0.85rem; margin-bottom: 0.6rem; }
+  .deal-form { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); align-items: end; background: var(--card2); border: 1px solid var(--line); border-radius: var(--r1); padding: var(--s3); margin-bottom: var(--s3); }
   .deal-field { display: flex; flex-direction: column; min-width: 0; }
-  .deal-field label { margin-bottom: 0.25rem; font-size: 0.8rem; color: var(--muted); }
-  .deal-form select, .deal-form input { margin: 0; width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 4px; padding: 0.45rem 0.55rem; font-family: var(--mono); font-size: 0.86rem; background: var(--surface); color: var(--text); }
+  .deal-form select, .deal-form input { margin: 0; }
   .deal-terms { grid-column: 1 / -1; }
-  .deal-send { grid-column: 1 / -1; justify-self: end; min-width: 150px; }
-  .deal-send:disabled { opacity: 0.45; cursor: not-allowed; }
-  @media (max-width: 560px) { .deal-form { grid-template-columns: 1fr; } }
-  .deal-card { border: 1px solid var(--border); border-radius: 5px; background: var(--surface2); padding: 0.5rem 0.7rem; margin-bottom: 0.4rem; font-size: 0.82rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-  .deal-card .deal-actions { margin-left: auto; display: flex; gap: 0.4rem; }
-  .deal-card button { padding: 0.3rem 0.7rem; font-size: 0.8rem; }
-  .deal-status { font-family: var(--mono); font-size: 0.68rem; padding: 0.12rem 0.4rem; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.04em; }
-  .ds-proposed { background: #3a2c10; color: #e8b84a; border: 1px solid #6a521c; }
-  .ds-accepted { background: #26301a; color: #acc87a; border: 1px solid #3c4a26; }
-  .deal-meter { font-size: 0.78rem; color: var(--dim); margin: 0.15rem 0 0.5rem; min-height: 1em; }
-  .deal-meter b { color: var(--tan); font-family: var(--mono); }
-  .deal-mkt { color: var(--muted); font-size: 0.74rem; font-family: var(--mono); }
-  .dec-head { font-family: var(--serif); font-weight: 600; font-size: 1rem; color: var(--text); margin-bottom: 0.15rem; }
-  .dec-sub { font-size: 0.78rem; color: var(--muted); margin-bottom: 0.5rem; }
-  .opt-row { display: flex; flex-wrap: wrap; gap: 0.45rem; }
-  .opt { flex: 1; min-width: 120px; border: 1.5px solid var(--border); border-radius: 5px; background: var(--surface2); padding: 0.5rem 0.6rem; cursor: pointer; text-align: left; transition: border-color .12s, background .12s; }
-  .opt:hover { border-color: var(--accent); }
-  .opt.on { border-color: var(--accent); background: #2f2513; box-shadow: 0 0 0 1px var(--accent) inset; }
-  .opt .opt-t { font-weight: 700; font-size: 0.84rem; color: var(--text); }
-  .opt .opt-d { font-size: 0.72rem; color: var(--muted); margin-top: 0.15rem; line-height: 1.3; font-family: var(--mono); }
-  .consequence { position: sticky; bottom: 0; background: var(--surface2); color: var(--sand); border: 1px solid var(--border); border-radius: 5px; padding: 0.75rem 0.95rem; font-size: 0.84rem; margin-top: 0.5rem; }
-  .consequence b { color: var(--tan); font-family: var(--mono); }
-  .fit-note { font-size: 0.78rem; margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px solid var(--border); color: var(--dim); }
-  .techpill.on { background: var(--accent) !important; color: #1a1510 !important; border-color: var(--accent) !important; }
+  .deal-send { grid-column: 1 / -1; justify-self: end; min-width: 9rem; }
+  @media (max-width: 35rem) { .deal-form { grid-template-columns: 1fr; } .deal-send { justify-self: stretch; } }
+  .deal-card { border: 1px solid var(--line); border-radius: var(--r1); background: var(--card2); padding: var(--s2) var(--s3); margin-bottom: var(--s2); font-size: var(--t-1); display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+  .deal-card .deal-actions { margin-left: auto; display: flex; gap: var(--s2); flex-wrap: wrap; }
+  main .deal-card button { min-height: 2.5rem; padding: var(--s1) var(--s3); font-size: var(--t-1); }
+  .deal-status { font: 600 .6875rem/1.6 var(--font-mono); padding: 0 var(--s2); border: 1px solid var(--line2); border-radius: 999px; text-transform: uppercase; letter-spacing: .06em; color: var(--mute); }
+  .deal-meter { font-size: var(--t-1); color: var(--mute); margin: var(--s1) 0 var(--s3); min-height: 1em; }
+  .deal-meter b { font-family: var(--font-mono); }
+  .deal-mkt { color: var(--mute); font: var(--t-1)/1.3 var(--font-mono); }
+  .dec-head { font-family: var(--font-head); font-weight: 600; font-size: var(--t1); margin-bottom: 2px; }
+  .dec-sub { font-size: var(--t-1); color: var(--mute); margin-bottom: var(--s2); }
+  .opt-row { display: flex; flex-wrap: wrap; gap: var(--s2); }
+  .opt { flex: 1; min-width: 7.5rem; border: 1px solid var(--line); border-radius: var(--r1); background: var(--card); padding: var(--s2) var(--s3); min-height: var(--touch); cursor: pointer; text-align: left; font: inherit; color: var(--ink); transition: border-color .12s; }
+  .opt:hover { border-color: var(--line2); }
+  .opt.on { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+  .opt .opt-t { font-weight: 700; }
+  .opt .opt-d { font: var(--t-1)/1.3 var(--font-mono); color: var(--mute); margin-top: 2px; }
+  .consequence { background: var(--card2); border: 1px solid var(--line); border-radius: var(--r1); padding: var(--s3) var(--s4); font-size: var(--t-1); margin-top: var(--s3); }
+  .consequence b { font-family: var(--font-mono); }
+  .fit-note { font-size: var(--t-1); margin-top: var(--s2); padding-top: var(--s2); border-top: 1px solid var(--line); color: var(--mute); }
+  .techpill { font: inherit; }
+  .techpill.on { background: var(--ink) !important; color: var(--bg) !important; border-color: var(--ink) !important; }
   /* glossary: dotted term that reveals a definition on hover (desktop) or tap (touch) */
-  .gloss { border-bottom: 1px dotted var(--tan); cursor: help; position: relative; }
-  .gloss > .gloss-pop { visibility: hidden; opacity: 0; position: absolute; bottom: 135%; left: 0; z-index: 40;
-    width: 230px; background: #0f0c08; color: var(--sand); border: 1px solid var(--accent); border-radius: 5px;
-    padding: 0.5rem 0.65rem; font-size: 0.74rem; line-height: 1.35; font-family: 'Atkinson Hyperlegible', sans-serif;
-    text-transform: none; letter-spacing: 0; font-weight: 400; box-shadow: 0 6px 20px rgba(0,0,0,0.5); transition: opacity .12s; }
-  .gloss:hover > .gloss-pop, .gloss.open > .gloss-pop { visibility: visible; opacity: 1; }
-  .gloss > .gloss-pop b { color: var(--tan); }
-  .bs-table td { padding: 0.28rem 0.5rem; border: none; }
-  .bs-table tr.rule td { border-top: 1px solid var(--border); }
-  .bs-num { font-family: var(--mono); text-align: right; }
-  .bs-neg { color: #d99079; }
-  /* Year-1 onboarding strip: sticky 3-step guide, shown only on the year-1 board/auction
-     screen (human playtest 9/02: year 1 was the confusing screen, everything after was fine) */
-  .onboard-strip { position: sticky; top: 0; z-index: 500; background: var(--surface2); border: 1px solid var(--border); border-radius: 0 0 6px 6px; padding: 0.6rem 0.9rem 0.5rem; margin-bottom: 1rem; box-shadow: 0 4px 14px rgba(0,0,0,0.35); }
-  .onboard-steps { display: flex; flex-wrap: wrap; gap: 0.6rem 1.3rem; }
-  .onboard-step { display: flex; align-items: center; gap: 0.4rem; font-size: 0.82rem; color: var(--dim); font-family: var(--mono); }
-  .onboard-step .ob-check { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; border: 1.5px solid var(--border); font-size: 0.68rem; flex-shrink: 0; }
-  .onboard-step.done { color: var(--sage); }
-  .onboard-step.done .ob-check { border-color: var(--sage); background: var(--sage); color: #12160a; }
-  .onboard-note { font-size: 0.76rem; color: var(--muted); margin-top: 0.4rem; }
-  @keyframes obPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(189,119,51,0.55); } 50% { box-shadow: 0 0 0 7px rgba(189,119,51,0); } }
+  .gloss { border-bottom: 1px dotted var(--mute); cursor: help; position: relative; }
+  .gloss > .gloss-pop { display: none; position: absolute; bottom: 135%; left: 50%; transform: translateX(-50%); z-index: 40;
+    width: min(15rem, 80vw); background: var(--ink); color: var(--bg); border-radius: var(--r1);
+    padding: var(--s2) var(--s3); font: var(--t-1)/1.35 var(--font-body);
+    text-transform: none; letter-spacing: 0; font-weight: 400; box-shadow: var(--shadow); }
+  .gloss:hover > .gloss-pop, .gloss.open > .gloss-pop { display: block; }
+  /* slice 1: the prototype's "i" dot beside every explained term (tap opens the one-line pop) */
+  .gloss { border-bottom: 0; }
+  .gloss::after { content: "i"; display: inline-grid; place-items: center; width: 1.05em; height: 1.05em; margin-left: .25em;
+    border: 1px solid var(--line2); border-radius: 50%; color: var(--mute); font: 700 .68em/1 var(--font-mono); vertical-align: .05em; }
+  .opt .gloss > .gloss-pop { left: 0; transform: none; }
+  /* slice 1: journey strip (Call, Prepare, Trial, Reward, Return), inside the sticky header */
+  .journey { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; margin-top: 2px; }
+  .journey[hidden] { display: none; }
+  .journey .st { text-align: center; padding: 3px 0; font: 600 .5625rem/1 var(--font-mono); letter-spacing: .06em; text-transform: uppercase;
+    color: var(--mute); border-top: 2px solid var(--line); }
+  .journey .st.done { border-top-color: var(--mute); }
+  .journey .st.now { color: var(--bg); background: var(--ink); border-top-color: var(--ink); border-radius: var(--r1); }
+  .bs-table td { padding: var(--s1) var(--s2); border: none; }
+  .bs-table tr.rule td { border-top: 1px solid var(--line); }
+  .bs-num { font-family: var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; }
+  .bs-neg { color: var(--down); }
+  /* Year-1 onboarding: three steps, shown only on the year-1 board */
+  .onboard-strip { border: 1px dashed var(--line2); border-radius: var(--r1); padding: var(--s2) var(--s3); margin-bottom: var(--s4); }
+  .onboard-steps { display: flex; flex-wrap: wrap; gap: var(--s2) var(--s4); }
+  .onboard-step { display: flex; align-items: center; gap: var(--s2); font-size: var(--t-1); color: var(--mute); }
+  .onboard-step .ob-check { display: inline-flex; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border-radius: 50%; border: 1px solid var(--line2); font: .6875rem/1 var(--font-mono); flex-shrink: 0; }
+  .onboard-step.done { color: var(--ink); }
+  .onboard-step.done .ob-check { border-color: var(--ink); background: var(--ink); color: var(--bg); }
+  @keyframes obPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(185,79,50,0.55); } 50% { box-shadow: 0 0 0 7px rgba(185,79,50,0); } }
   #btnLockYear.pulse { animation: obPulse 1.8s ease-in-out infinite; }
+  /* the one action: a sticky row at the foot of the year page */
+  .lockrow { position: sticky; bottom: 0; z-index: 5; display: flex; gap: var(--s2); align-items: center; margin: var(--s4) calc(-1 * var(--gutter)) calc(-1 * var(--s4)); padding: var(--s3) var(--gutter); padding-bottom: calc(var(--s3) + env(safe-area-inset-bottom, 0px)); background: var(--bg); border-top: 1px solid var(--line); }
+  .lockrow .btn { flex: 1 1 auto; }
+  .lockrow .status { font-size: var(--t-1); color: var(--mute); flex: 2 1 12rem; }
+  /* ranch market: a card per listing, the map above it */
+  .ranches { display: grid; gap: var(--s3); }
+  .ranch { display: grid; grid-template-columns: 1fr auto; gap: var(--s1) var(--s3); align-items: center; }
+  .ranch b { font-family: var(--font-head); font-size: var(--t1); }
+  .ranch .where { grid-column: 1; font-size: var(--t-1); color: var(--mute); }
+  .ranch .nums { grid-column: 1; display: flex; gap: var(--s3); flex-wrap: wrap; font: var(--t-1)/1.3 var(--font-mono); }
+  .ranch .nums span { color: var(--mute); }
+  .ranch .nums b { font: 600 var(--t0)/1.3 var(--font-mono); }
+  .ranch .btn { grid-column: 2; grid-row: 1 / span 3; }
+  /* bull lots: a card each, photo plate on top */
+  .lot { padding: 0; overflow: hidden; margin-bottom: var(--s3); }
+  .lot .plate { position: relative; height: 150px; background: var(--card2); display: flex; align-items: center; justify-content: center; }
+  .lot .plate img { max-width: 100%; max-height: 100%; width: auto; height: auto; object-fit: contain; display: block; }
+  .lot .plate span { position: absolute; bottom: 0; left: 0; right: 0; color: var(--mute); font: .6875rem/1.3 var(--font-mono); padding: var(--s2) var(--s3) var(--s1); background: linear-gradient(transparent, var(--card2)); }
+  .lot .body { padding: var(--s3) var(--s4) var(--s4); }
+  .lot .lotno { font: var(--t-1)/1.3 var(--font-mono); color: var(--mute); letter-spacing: .08em; }
+  .lot .name { font-family: var(--font-head); font-weight: 600; font-size: var(--t1); }
+  @container (max-width: 26rem) {
+    .screen > .status { gap: var(--s2); }
+    .screen > .status .stat .v { font-size: var(--t1); }
+    .stat.county .v { font-size: var(--t-1); }
+    .stat.county .k { display: none; }
+  }
+  html.projector .screen > .top { position: static; }
 </style>
 </head>
 <body>
-<header>
-  <h1>The Bull Market</h1>
-  <span class="badge">Team</span>
-  <span id="phaseChip" class="phase-chip">lobby</span>
+<div class="screen">
+<header class="top">
+  <a class="mark" href="index.html"><i>B</i><b>Bull Market</b></a>
+  <div class="round"><b id="phaseChip">lobby</b> <span id="yearChip"></span></div>
+  <!-- WALLET: season placeholder. Display only; season.js seeds it (integration/bull-market.md). -->
+  <div class="wallet" id="wallet"><span class="k">Wallet</span><span class="v">$1,000</span><span class="d"></span></div>
+  <nav class="journey" id="journey" aria-label="Where you are" hidden></nav>
 </header>
-<main>
+<main class="play">
   <div id="msg"></div>
 
   <!-- Join form -->
   <section id="secJoin">
-    <h2>Join Game</h2>
+    <h1 class="title-art">Bull<br>Market<small>MBA 546 &middot; five years &middot; one phone per table</small></h1>
     <div class="card">
-      <label>Join Code (5 letters)</label>
-      <input type="text" id="inCode" maxlength="6" placeholder="ABCDE" oninput="this.value=this.value.toUpperCase()">
-      <label>Team Name</label>
+      <label>Join code</label>
+      <input type="text" id="inCode" class="code" maxlength="6" placeholder="ABCDE" oninput="this.value=this.value.toUpperCase()">
+      <label>Team name</label>
       <input type="text" id="inName" maxlength="40" placeholder="e.g. Rafter 9 Ranch">
-      <button onclick="joinGame()">Join</button>
+      <button class="btn act block" onclick="joinGame()">Join</button>
     </div>
   </section>
 
@@ -179,39 +218,31 @@
   <section id="secLobbyWait" style="display:none">
     <h2>Lobby</h2>
     <div class="card">
-      <p>You are in the lobby. Waiting for the instructor to start the game.</p>
-      <p style="margin-top:0.6rem;font-size:0.85rem;color:var(--muted)">You will pick your ranch and your strategy when the market opens.</p>
-      <div id="lobbyTeamList" style="margin-top:0.8rem;font-size:0.85rem;color:var(--muted)"></div>
+      <p>In. Waiting for the instructor to open the market.</p>
+      <div id="lobbyTeamList" class="mute small"></div>
     </div>
   </section>
 
-  <!-- My Ranch Stats -->
-  <section id="secStats" style="display:none">
-    <h2>My Ranch <span id="statArchLabel" style="font-size:0.8rem;color:var(--muted);text-transform:none;letter-spacing:0"></span></h2>
-    <div class="stat-grid" id="statGrid">
-      <div class="stat-box"><div class="stat-label">Cash</div><div class="stat-val" id="statCash">--</div></div>
-      <div class="stat-box"><div class="stat-label">Herd</div><div class="stat-val" id="statHerd">--</div></div>
-      <div class="stat-box"><div class="stat-label">County</div><div class="stat-val" id="statCounty" style="font-size:0.9rem">--</div></div>
-      <div class="stat-box"><div class="stat-label"><span class="gloss" id="gsRepLabel" onclick="toggleGloss('gsRepLabel',event)">Reputation<span class="gloss-pop"><b>Reputation</b> (Rep): a 0 to 100 score for your brand standing. Higher reputation earns better prices; fire sales and shortcuts push it down.</span></span></div><div class="stat-val" id="statRep">--</div></div>
-    </div>
-  </section>
-
-  <!-- Year-1 onboarding strip: sticky guide for the confusing first year, hidden after -->
+  <!-- Year-1 onboarding strip: three steps, hidden after year 1 -->
   <div id="onboardStrip" class="onboard-strip" style="display:none">
     <div class="onboard-steps">
-      <div class="onboard-step" id="obStep1"><span class="ob-check" data-n="1">1</span> Find your secret objective (the box under the map). It is what you are graded on.</div>
-      <div class="onboard-step" id="obStep2"><span class="ob-check" data-n="2">2</span> Pick herd and hire hands</div>
-      <div class="onboard-step" id="obStep3"><span class="ob-check" data-n="3">3</span> Bid on bulls and Lock In Year</div>
+      <div class="onboard-step" id="obStep1"><span class="ob-check" data-n="1">1</span> Read your objective (under the map)</div>
+      <div class="onboard-step" id="obStep2"><span class="ob-check" data-n="2">2</span> Pick herd and hands</div>
+      <div class="onboard-step" id="obStep3"><span class="ob-check" data-n="3">3</span> Bid, then lock in</div>
     </div>
-    <div class="onboard-note">Other tables have different objectives, so the same bull is worth different money to each of them. Keep yours to yourself.</div>
   </div>
 
   <!-- Board Meeting: set operations for the year -->
   <section id="secBoard" style="display:none">
-    <h2>Board Meeting <span id="boardYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <h2>Board meeting <span id="boardYearLabel"></span></h2>
     <div class="card">
       <div id="boardRecap"></div>
       <div id="boardBanner" class="board-banner"></div>
+      <div class="dials" id="boardDials">
+        <div class="dial sm" id="dialDrought"><div class="face"></div><div class="read"></div><div class="lab">Drought</div></div>
+        <div class="dial sm" id="dialFeeder"><div class="face"></div><div class="read"></div><div class="lab">Feeder index</div></div>
+        <div class="dial sm" id="dialCash"><div class="face"></div><div class="read"></div><div class="lab">Cash of stake</div></div>
+      </div>
       <div class="board-top">
         <div>
           <div class="mini-map" id="boardMap"></div>
@@ -226,47 +257,47 @@
       <div class="control-grid">
         <div class="dec-block">
           <div class="dec-head">Herd</div>
-          <div class="dec-sub">Buy or sell cows for the year. Irreversible before the shock hits.</div>
+          <div class="dec-sub">Buy or sell cows for the year.</div>
           <div class="opt-row" id="optHerd"></div>
         </div>
         <div class="dec-block">
           <div class="dec-head">Cull for</div>
-          <div class="dec-sub">The bottom of the herd leaves every year. What you cull for decides what the herd gets better at. One reason a year; the gains stay.</div>
+          <div class="dec-sub">One reason a year; the gains stay.</div>
           <div class="opt-row" id="optCull"></div>
         </div>
         <div class="dec-block">
           <div class="dec-head">Debt</div>
-          <div class="dec-sub">Cash today against interest later. Rate hikes bite borrowers.</div>
+          <div class="dec-sub">Cash now, interest later.</div>
           <div class="opt-row" id="optDebt"></div>
         </div>
         <div class="dec-block">
-          <div class="dec-head">Hire Hands</div>
-          <div class="dec-sub" id="hireSub">Hands take a year to learn the place. Hired now, useful next year.</div>
+          <div class="dec-head">Hire hands</div>
+          <div class="dec-sub" id="hireSub">Hired now, useful next year.</div>
           <div class="opt-row" id="optHire"></div>
         </div>
         <div class="dec-block">
           <div class="dec-head">Technology</div>
-          <div class="dec-sub">Adopt at most one. Fit is how well it suits your county.</div>
+          <div class="dec-sub">Fit is how well it suits your county.</div>
           <div id="techPills"></div>
         </div>
         <div class="dec-block">
-          <div class="dec-head">Buy Genetics (<span class="gloss" id="gsAiHead" onclick="toggleGloss('gsAiHead',event)">AI<span class="gloss-pop"><b>AI</b> (Artificial Insemination): breeding cows using purchased bull semen instead of a bull mounting the cow directly. Nothing to do with computer AI.</span></span> semen)</div>
-          <div class="dec-sub">Buy proven <span class="gloss" id="gsAiSub1" onclick="toggleGloss('gsAiSub1',event)">AI<span class="gloss-pop"><b>AI</b> (Artificial Insemination): breeding cows using purchased bull semen instead of a bull mounting the cow directly. Nothing to do with computer AI.</span></span> semen instead of chasing a bull at auction. Cheaper, but it does not always settle.</div>
+          <div class="dec-head">Buy genetics (<span class="gloss" id="gsAiHead" onclick="toggleGloss('gsAiHead',event)">AI<span class="gloss-pop"><b>AI</b> (Artificial Insemination): breeding cows using purchased bull semen instead of a bull mounting the cow directly. Nothing to do with computer AI.</span></span> semen)</div>
+          <div class="dec-sub">Cheaper than a bull, but it does not always settle.</div>
           <div id="semenOffers"></div>
         </div>
         <div class="dec-block">
-          <div class="dec-head">Sell Genetics (your bulls)</div>
-          <div class="dec-sub">Open a proven bull you own to the national semen market and set your price per <span class="gloss" id="gsStrawSub1" onclick="toggleGloss('gsStrawSub1',event)">straw<span class="gloss-pop"><b>Straw</b>: one frozen dose of bull semen, enough to breed one cow. Sold by the unit.</span></span>. Demand follows quality and price. This is how a <span class="gloss" id="gsSeedstockSub1" onclick="toggleGloss('gsSeedstockSub1',event)">seedstock<span class="gloss-pop"><b>Seedstock</b>: a ranch that sells breeding genetics (bulls and semen) to other ranchers, instead of selling beef.</span></span> ranch makes money: selling genetics instead of beef.</div>
+          <div class="dec-head">Sell genetics</div>
+          <div class="dec-sub">Open a proven bull to the semen market and set a price per <span class="gloss" id="gsStrawSub1" onclick="toggleGloss('gsStrawSub1',event)">straw<span class="gloss-pop"><b>Straw</b>: one frozen dose of bull semen, enough to breed one cow. Sold by the unit.</span></span>.</div>
           <div id="semenSell"></div>
         </div>
         <div class="dec-block span2">
-          <div class="dec-head">Rendering / <span class="gloss" id="gsTallowHead" onclick="toggleGloss('gsTallowHead',event)">Tallow<span class="gloss-pop"><b>Tallow</b>: beef fat rendered from cull cows, sold for fuel and cosmetics. A rendering plant turns culls into tallow, a byproduct check on the side.</span></span></div>
-          <div class="dec-sub">Sign a rendering contract to sell tallow off your <span class="gloss" id="gsCullSub1" onclick="toggleGloss('gsCullSub1',event)">cull<span class="gloss-pop"><b>Cull</b>: selling off your worst or oldest cows each year to keep herd quality up. The cows you sell off are the culls.</span></span> cows. Byproduct income that rises in drought, when you cull more and calf checks shrink.</div>
+          <div class="dec-head">Rendering / <span class="gloss" id="gsTallowHead" onclick="toggleGloss('gsTallowHead',event)">tallow<span class="gloss-pop"><b>Tallow</b>: beef fat rendered from cull cows, sold for fuel and cosmetics. A rendering plant turns culls into tallow, a byproduct check on the side.</span></span></div>
+          <div class="dec-sub">Byproduct income off <span class="gloss" id="gsCullSub1" onclick="toggleGloss('gsCullSub1',event)">cull<span class="gloss-pop"><b>Cull</b>: selling off your worst or oldest cows each year to keep herd quality up. The cows you sell off are the culls.</span></span> cows. Pays more in drought.</div>
           <div id="tallowChoice"></div>
         </div>
         <div class="dec-block span2">
-          <div class="dec-head">Deals with Other Teams</div>
-          <div class="dec-sub">Co-opetition: offer a rival a bull, a shared <span class="gloss" id="gsAiSub2" onclick="toggleGloss('gsAiSub2',event)">AI<span class="gloss-pop"><b>AI</b> (Artificial Insemination): breeding cows using purchased bull semen instead of a bull mounting the cow directly. Nothing to do with computer AI.</span></span> <span class="gloss" id="gsStrawSub2" onclick="toggleGloss('gsStrawSub2',event)">straw<span class="gloss-pop"><b>Straw</b>: one frozen dose of bull semen, enough to breed one cow. Sold by the unit.</span></span>, a co-funded project, or an embryo share. Talk it over in the room, send the offer, and they accept on their own screen. The trade settles when the year resolves, like your bids.</div>
+          <div class="dec-head"><span class="gloss" id="gsDealsHead" onclick="toggleGloss('gsDealsHead',event)">Deals<span class="gloss-pop"><b>Deals</b>: alliances with other outfits. An offer goes out from one team, and it settles only if the other team accepts.</span></span> with other teams</div>
+          <div class="dec-sub">Talk it over in the room, send the offer, they accept on their screen. Settles when the year resolves.</div>
           <div id="dealsPanel"></div>
         </div>
       </div>
@@ -277,60 +308,41 @@
 
   <!-- Market: pick a ranch -->
   <section id="secMarket" style="display:none">
-    <h2>Ranch Market</h2>
+    <h2>Ranch market</h2>
     <div class="card">
-      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.8rem">
-        Pick a ranch. Each ranch comes with the strategy it is run under today, and buying it
-        makes that strategy your scorecard for the whole game. Cash left is what you have to
-        run the place and buy bulls. The country matters as much as the ranch: click a row to
-        see what its region pays for, what it costs, and how dry it runs.
-      </p>
-      <div class="mini-map" id="marketMap" style="margin-bottom:0.9rem"></div>
-      <div style="overflow-x:auto">
-        <table id="tblMarket">
-          <thead><tr><th>Ranch</th><th>County</th><th>Herd</th><th>Ask</th><th>Cash left</th><th>Strategy</th><th>Action</th></tr></thead>
-          <tbody id="tbodyMarket"></tbody>
-        </table>
-      </div>
+      <p class="mute small">Pick a ranch. Its strategy becomes your scorecard for the game. Tap a county or a card to see what the country pays for.</p>
+      <div class="mini-map" id="marketMap" style="margin-bottom:var(--s3)"></div>
+      <div class="ranches" id="tbodyMarket"></div>
       <div id="buyConfirm" style="display:none"></div>
     </div>
   </section>
 
   <!-- Auction: enter bids (same page as operations; one lock-in below) -->
   <section id="secAuction" style="display:none">
-    <h2>Sealed-Bid Bull Sale <span id="auctionYearLabel" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <h2>Sealed-bid bull sale <span id="auctionYearLabel"></span></h2>
     <div class="card">
-      <p style="font-size:0.82rem;color:var(--muted);margin-bottom:0.7rem">
-        Enter a max bid per bull. You win each bull you top, up to your herd <span class="gloss" id="gsSireIntro" onclick="toggleGloss('gsSireIntro',event)">sire<span class="gloss-pop"><b>Sire</b>: a breeding bull. Your ranch runs only a handful of working bulls at once (sire slots), and each bull typically retires after about 4 years.</span></span> slots. Your
-        bids draw on the cash left <strong>after</strong> the operations above, so set your plan
-        first. Nothing is final until you lock in the year, and you can revise until the
-        instructor resolves. The sale is sealed-bid: everyone submits one blind bid, the
-        highest bid above the reserve wins, and the winner pays its own bid amount, so bid
-        your true maximum.
-      </p>
-      <div id="auctionHerd" style="margin-bottom:0.9rem"></div>
+      <p class="mute small">One blind max bid per bull. Highest bid above the <span class="gloss" id="gsReserveIntro" onclick="toggleGloss('gsReserveIntro',event)">reserve<span class="gloss-pop"><b>Reserve</b>: the minimum bid the seller will accept (82% of anchor). A bid below reserve does not win the bull.</span></span> wins and pays its own bid, so bid your true maximum. Bids draw on cash left after the operations above.</p>
+      <div id="auctionHerd" style="margin-bottom:var(--s3)"></div>
       <div id="bullCards"></div>
-      <!-- sticky exposure HUD: stays pinned to the viewport bottom while scrolling lots -->
       <div id="auctionExposure" class="consequence"></div>
       <!-- rationale gate (Item 1): a one-line reason is required for every Lock In -->
-      <div style="margin-top:0.9rem">
-        <label for="lockinRationale" style="display:block;font-size:0.8rem;color:var(--muted);margin-bottom:0.25rem">One-line rationale for this year's plan (required to lock in)</label>
-        <input type="text" id="lockinRationale" maxlength="280" placeholder="Why this plan, in one line" style="margin-bottom:0">
+      <div style="margin-top:var(--s3)">
+        <label for="lockinRationale">Why this plan, in one line (required)</label>
+        <input type="text" id="lockinRationale" maxlength="280" placeholder="One line" style="margin-bottom:0">
       </div>
-      <div class="row" style="margin-top:0.9rem;display:flex;align-items:center;gap:0.8rem">
-        <button id="btnLockYear" onclick="submitPlay()">Lock In Year</button>
-        <span class="status" id="lockMsg" style="font-size:0.82rem;color:var(--muted)">Locks your operations and all bids together. Revise anytime until the year resolves.</span>
+      <div class="lockrow">
+        <button id="btnLockYear" class="btn act lg" onclick="submitPlay()">Lock in year</button>
+        <span class="status" id="lockMsg">Operations and bids lock together. Revise until the year resolves.</span>
       </div>
-      <p style="font-size:0.62rem;color:var(--muted);margin-top:0.8rem;font-family:var(--mono)">
-        Bull photos are representative stock images, not the specific lots. Sources: USDA (public domain) and
-        Wikimedia Commons contributors under CC BY / CC BY-SA. Full attribution in assets/bulls/LICENSE.md.
+      <p class="mute" style="font:.6875rem/1.3 var(--font-mono);margin-top:var(--s4)">
+        Bull photos are representative stock images, not the specific lots (USDA public domain; Wikimedia Commons CC BY / CC BY-SA; see assets/bulls/LICENSE.md).
       </p>
     </div>
   </section>
 
   <!-- Won this year -->
   <section id="secWon" style="display:none">
-    <h2>Auction Results</h2>
+    <h2>Auction results</h2>
     <div class="card" id="cardWon">Waiting for resolution.</div>
   </section>
 
@@ -344,24 +356,29 @@
   <section id="secStandings" style="display:none">
     <h2>Standings</h2>
     <div class="card">
-      <div style="font-size:0.82rem;color:var(--muted);margin-bottom:0.7rem;line-height:1.45">
-        Two rankings, and they are not the same race. <b>Scorecard</b> measures every outfit
-        against its own strategy's weights, which is what the game actually scores.
-        <b>Cash</b> is the bank balance. Leading one and trailing the other is normal.
-      </div>
-      <table id="tblStandings">
-        <thead><tr><th>Scorecard</th><th>Cash</th><th>Team</th><th>Cash</th><th>Bar</th></tr></thead>
+      <p class="mute small">Two races. <b>Scorecard</b> is what the game scores, each outfit against its own strategy. <b>Cash</b> is the bank balance.</p>
+      <div class="table-wrap"><table id="tblStandings">
+        <thead><tr><th>Score</th><th>Cash</th><th>Team</th><th>Cash</th><th></th></tr></thead>
         <tbody id="tbodyStandings"></tbody>
-      </table>
+      </table></div>
     </div>
   </section>
 </main>
 
+<!-- status strip: the three numbers that matter, under every screen once a ranch exists -->
+<div id="secStats" class="status" style="display:none">
+  <div class="stat"><span class="v" id="statCash">--</span><span class="k">cash</span></div>
+  <div class="stat"><span class="v" id="statHerd">--</span><span class="k">herd</span></div>
+  <div class="stat"><span class="v" id="statRep">--</span><span class="k"><span class="gloss" id="gsRepLabel" onclick="toggleGloss('gsRepLabel',event)">rep<span class="gloss-pop"><b>Reputation</b> (Rep): a 0 to 100 score for your brand standing. Higher reputation earns better prices; fire sales and shortcuts push it down.</span></span></span></div>
+  <div class="stat county"><span class="v" id="statCounty">--</span><span class="k" id="statArchLabel"></span></div>
+</div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=ac44d7bd8c"></script>
-<script src="recap.js?v=67b2825eaf"></script>
+<script src="engine.js?v=d20afd4da3"></script>
+<script src="recap.js?v=b31cdfe473"></script>
 <!-- optional asset bundles; if absent the UI falls back gracefully. ?v bumps bust the cache -->
 <script src="assets/bulls/manifest.js?v=2"></script>
 <script src="county-geo.js?v=b95a77d815"></script>
@@ -396,6 +413,17 @@ const GLOSSARY = {
   embryo: '<b>Embryo / flush share</b>: paying a partner to move embryos from their best cows into your herd. A one-time genetics upgrade, not an ongoing program.',
   droughtExposure: '<b>Drought exposure</b>: how hard drought hits your county, as a multiplier on the average. 1.4x means 40 percent worse than average.',
   distressNote: '<b>Distress note</b>: an emergency loan the game automatically gives you when you run out of cash.',
+  vet: '<b>Vet check</b>: a vet looks at a lot before the sale and tells you his true $Beef, not the catalog estimate. It costs a fee.',
+  spend: '<b>Spending line</b>: the most your team has agreed to pay for a lot. You can still bid over it; keep it where you can live with it.',
+  deals: '<b>Deals</b>: alliances with other outfits. An offer goes out from one team, and it settles only if the other team accepts.',
+  landCap: '<b>Land cap</b>: the head your ground can carry. Room to grow is the cap minus your herd.',
+  drought: '<b>Drought</b>: this year\'s dryness. Feed costs rise and calf crops fall with it, harder on dry ground.',
+  guide: '<b>Guide</b>: the price range printed for a bull of this tier, so you know what a fair bid looks like.',
+  objective: '<b>Objective</b>: your investors\' scorecard. The percentages show how much each result counts toward your score.',
+  cullMore: '<b>More calves</b>: cull the cows that come up open. Calving rate climbs a little each year you keep at it.',
+  cullLast: '<b>Cows that last</b>: cull on feet and udders. The cows you keep stay sound longer, so fewer replacements.',
+  cullBetter: '<b>Better calves</b>: cull the bottom of the herd\'s genetics so the herd\'s traits climb faster.',
+  cullEasy: '<b>Easier handling</b>: cull the wild ones. Quiet cattle need fewer hands, so the crew stretches further.',
   interest: '<b>Interest on debt</b>: the ongoing cost of carrying debt, charged as a percent of what you owe.',
 };
 let _glossId = 0;
@@ -432,8 +460,24 @@ function msg(text, type) {
   if (text) _msgTimer = setTimeout(() => { el.textContent = ''; el.className = ''; }, 5000);
 }
 
+// ---- journey strip (presentational only): Call, Prepare, Trial, Reward, Return.
+// market (year 0 ranch purchase) = Call; the combined year page = Prepare until the team
+// locks in, then Trial (waiting on the sale); resolve = Reward; ended = Return. ----
+const JOURNEY = ['Call', 'Prepare', 'Trial', 'Reward', 'Return'];
+let _journeyKey = '', _journeyLocked = false;
+function setJourney(phase) {
+  const nav = document.getElementById('journey'); if (!nav) return;
+  const key = phase + ':' + CUR_YEAR;
+  if (key !== _journeyKey) { _journeyKey = key; _journeyLocked = false; }
+  const n = { market: 0, board: _journeyLocked ? 2 : 1, auction: _journeyLocked ? 2 : 1, resolve: 3, ended: 4 }[phase];
+  if (n === undefined) { nav.hidden = true; return; }
+  nav.hidden = false;
+  nav.innerHTML = JOURNEY.map((w, i) => `<div class="st${i < n ? ' done' : i === n ? ' now' : ''}">${w}</div>`).join('');
+}
 function setPhaseChip(phase) {
   document.getElementById('phaseChip').textContent = phase;
+  setJourney(phase);
+  const yc = document.getElementById('yearChip'); if (yc) yc.textContent = CUR_YEAR > 0 ? 'Year ' + CUR_YEAR : '';
 }
 
 // ---- Join game ----
@@ -644,6 +688,7 @@ function houseStrategy(r) {
 }
 
 let marketRanches = [];
+let marketSelCounty = null;  // presentational: the tapped county is tinted and labelled
 // ---- What the country means (Steven 9/07: "do they ever understand the region difference?") ----
 const TRAIT_WORDS = { ce: 'calving ease', growth: 'growth', marb: 'marbling', forage: 'forage efficiency', milk: 'milk' };
 const TECH_WORDS = { water: 'water infrastructure', vfence: 'virtual fence', dogs: 'stock dogs', drone: 'drones', genomic: 'genomic testing' };
@@ -668,7 +713,7 @@ function regionProfileHtml(r) {
   const dry = reg.droughtExposure >= 1.2 ? 'the driest country in the game' : reg.droughtExposure >= 1.05 ? 'drier than average' : reg.droughtExposure <= 0.9 ? 'the wettest country in the game' : 'average drought exposure';
   const row = (k, v) => `<tr><td style="color:var(--dim);padding:0.1rem 0.6rem 0.1rem 0;white-space:nowrap">${k}</td><td style="padding:0.1rem 0">${v}</td></tr>`;
   return `<div style="border:1px solid var(--border);border-radius:5px;padding:0.5rem 0.7rem;margin:0.2rem 0 0.6rem;background:var(--surface)">` +
-    `<div style="font-weight:700;font-size:0.84rem;color:var(--tan);margin-bottom:0.25rem">What ${esc(reg.name)} country means</div>` +
+    `<div class="k" style="margin-bottom:0.25rem">${esc(reg.name)} country</div>` +
     `<table style="font-size:0.78rem;border-collapse:collapse">` +
     row('Calf prices', `<b>${reg.priceMult.toFixed(2)}x</b> the national level (${reg.priceMult >= 1.05 ? 'a premium market' : reg.priceMult <= 0.93 ? 'a discount market' : 'about average'})`) +
     row('Drought', `<b>${reg.droughtExposure}x</b> exposure, ${dry}. Drought hits feed cost and calf crop, never bull prices.`) +
@@ -682,29 +727,32 @@ function renderMarket(ranches) {
   marketRanches = ranches || [];
   // clickable map of the available counties (Steven: see the map when picking a ranch)
   const availSet = new Set(marketRanches.map(r => r.county));
-  document.getElementById('marketMap').innerHTML = buildGeoMap({ available: availSet, W: 512, H: 300 });
+  const countyCounts = {}; marketRanches.forEach(r => { countyCounts[r.county] = (countyCounts[r.county] || 0) + 1; });
+  document.getElementById('marketMap').innerHTML = buildGeoMap({ available: availSet, counts: countyCounts, selected: marketSelCounty, W: 512, H: 300 });
   const tbody = document.getElementById('tbodyMarket');
   tbody.innerHTML = '';
   if (!marketRanches.length) {
-    tbody.innerHTML = '<tr><td colspan="7"><em>No ranches available. You may have already purchased one.</em></td></tr>';
+    tbody.innerHTML = '<p class="mute small">No ranches available. You may have already purchased one.</p>';
     return;
   }
   marketRanches.forEach((r, i) => {
     r._name = RANCH_NAMES[i % RANCH_NAMES.length];
     r._house = houseStrategy(r);
-    const tr = document.createElement('tr');
+    const tr = document.createElement('div');
+    tr.className = 'card pick ranch';
+    tr.setAttribute('onclick', `openBuyConfirm('${r.id}')`);
     tr.innerHTML =
-      `<td>${esc(r._name)}</td><td>${esc(r.county)}<div style="font-size:0.7rem;color:var(--dim)">${regionOneLiner(r.region)}</div></td>` +
-      `<td>${r.herd.toLocaleString()} ${g('head', 'hd')}</td>` +
-      `<td>$${r.ask.toLocaleString()}</td>` +
-      `<td>$${(RanchEngine.START_CASH - r.ask).toLocaleString()}</td>` +
-      `<td>${esc(RanchEngine.ARCHETYPES[r._house]?.label || r._house)}</td>` +
-      `<td><button onclick="openBuyConfirm('${r.id}')">Buy</button></td>`;
+      `<b>${esc(r._name)}</b>` +
+      `<div class="where">${esc(r.county)} &middot; ${regionOneLiner(r.region).replace('<br>', ' &middot; ')}</div>` +
+      `<div class="nums"><span>herd <b>${r.herd.toLocaleString()}</b></span><span>ask <b>$${(r.ask / 1e6).toFixed(2)}M</b></span><span>left <b>$${((RanchEngine.START_CASH - r.ask) / 1e6).toFixed(2)}M</b></span></div>` +
+      `<div class="where"><span class="tag">${esc(RanchEngine.ARCHETYPES[r._house]?.label || r._house)}</span></div>` +
+      `<button class="btn" onclick="event.stopPropagation();openBuyConfirm('${r.id}')">Buy</button>`;
     tbody.appendChild(tr);
   });
 }
 // clicking a county on the market map opens the same buy-confirm card as the table button
 function pickRanchByCounty(county) {
+  marketSelCounty = county; renderMarket(marketRanches);
   const r = marketRanches.find(x => x.county === county);
   if (r) openBuyConfirm(r.id);
 }
@@ -718,14 +766,14 @@ function openBuyConfirm(ranchId) {
   const el = document.getElementById('buyConfirm');
   el.innerHTML =
     `<div class="card" style="margin-top:0.8rem;background:var(--surface2)">` +
-    `<div style="font-weight:700;font-size:0.95rem;color:var(--tan);margin-bottom:0.3rem">${esc(r._name)}</div>` +
+    `<h3 style="margin-bottom:0.3rem">${esc(r._name)}</h3>` +
     `<div style="font-size:0.82rem;color:var(--dim);margin-bottom:0.6rem">${esc(r.county)} &middot; ${r.herd.toLocaleString()} ${g('head', 'hd')} &middot; Ask $${r.ask.toLocaleString()} &middot; Cash left $${(RanchEngine.START_CASH - r.ask).toLocaleString()}</div>` +
     regionProfileHtml(r) +
     `<div style="margin-bottom:0.3rem">Strategy: <strong style="color:var(--tan)">${esc(stratLabel)}</strong> <span style="font-size:0.78rem;color:var(--dim)">(scorecard: ${scorecardWords(r._house)})</span></div>` +
-    `<p style="font-size:0.76rem;color:var(--muted);margin:0.1rem 0 0.7rem">This ranch is run as ${esc(stratLabel)}, so that becomes the strategy you are graded on for the game. How you play is your call, but your scorecard is set when you buy.</p>` +
+    `<p style="font-size:0.76rem;color:var(--muted);margin:0.1rem 0 0.7rem">Buying sets ${esc(stratLabel)} as your scorecard for the game.</p>` +
     `<div style="display:flex;gap:0.6rem">` +
-    `<button onclick="confirmBuy('${r.id}')">Confirm Buy</button>` +
     `<button class="secondary" onclick="document.getElementById('buyConfirm').style.display='none'">Cancel</button>` +
+    `<button class="btn act" style="flex:2" onclick="confirmBuy('${r.id}')">Confirm buy</button>` +
     `</div></div>`;
   el.style.display = '';
   el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -788,7 +836,7 @@ async function refreshMyStats() {
   const st = reviveState(team.state);
   const archInfo = RanchEngine.ARCHETYPES[ARCHETYPE];
 
-  document.getElementById('statArchLabel').textContent = '(' + (archInfo?.label || ARCHETYPE) + ')';
+  document.getElementById('statArchLabel').textContent = (archInfo?.label || ARCHETYPE);
   document.getElementById('statCash').textContent = '$' + Math.round(st.cash).toLocaleString();
   document.getElementById('statHerd').innerHTML = st.herd.toLocaleString() + ' ' + g('head', 'hd');
   document.getElementById('statCounty').textContent = st.county || '--';
@@ -857,7 +905,7 @@ function applyCowBuy(r, w) {
 }
 
 function boardKey() { return 'board_' + GAME_ID + '_' + TEAM_ID + '_' + CUR_YEAR; }
-function droughtColor(sev) { return sev >= 1.0 ? '#9b3a1a' : sev >= 0.5 ? '#c98a2b' : '#6b7c5c'; }
+function droughtColor(sev) { return 'var(--ink)'; }
 
 // translate the chosen option modes into the raw numbers the engine understands
 function herdDelta(st, w, mode) {
@@ -987,11 +1035,15 @@ async function refreshBoard(world) {
 
   // Situation banner (Frostpunk directional framing, colored by drought severity)
   const droughtWord = { mild: 'dry but manageable', moderate: 'moderate drought', severe: 'severe drought' }[w.drought] || w.drought;
-  document.getElementById('boardBanner').style.background = droughtColor(sev);
   document.getElementById('boardBanner').innerHTML =
-    `<span class="yr">Year ${CUR_YEAR} board meeting</span>` +
-    `Your board meets under ${droughtWord} at ${esc(st.county)}, and ${SHOCK_WORD[w.shock] || w.shock}. ` +
-    `The ${g('feederIdx', 'feeder index')} sits at ${(w.feederIdx || 1).toFixed(2)}, the signal that pulls bull prices with it.`;
+    `<span class="yr">Year ${CUR_YEAR} &middot; ${esc(st.county)}</span>` +
+    `${droughtWord.charAt(0).toUpperCase() + droughtWord.slice(1)}, ${SHOCK_WORD[w.shock] || w.shock}. The ${g('feederIdx', 'feeder index')} pulls bull prices with it.`;
+  // the situation as three dials: drought severity, feeder index, cash left of the stake
+  if (window.House) {
+    House.dial('#dialDrought', sev / 1.5, { value: w.drought === 'severe' ? 'Severe' : w.drought === 'moderate' ? 'Moderate' : 'Mild', label: 'Drought' });
+    House.dial('#dialFeeder', ((w.feederIdx || 1) - 0.7) / 0.6, { value: (w.feederIdx || 1).toFixed(2), label: 'Feeder index' });
+    House.dial('#dialCash', st.cash / (RanchEngine.START_CASH || 6500000), { value: '$' + (st.cash / 1e6).toFixed(2) + 'M', label: 'Cash of stake', tone: st.cash < 0 ? 'down' : '' });
+  }
 
   renderBoardMap(st, w, sev);
 
@@ -1008,7 +1060,7 @@ async function refreshBoard(world) {
     ? `No other outfit in this game runs your objective. The bull you want is worth different money at every other table.`
     : `${shareN} other ranch${shareN === 1 ? '' : 'es'} share${shareN === 1 ? 's' : ''} your objective. Expect to meet ${shareN === 1 ? 'it' : 'them'} on the same lots.`;
   document.getElementById('boardMandate').innerHTML =
-    `You run the <strong>${arch.label}</strong>. Your investors are scored on <strong>${topKpis.join('</strong> and <strong>')}</strong>.` +
+    `You run the <strong>${arch.label}</strong>. Your ${g('objective', 'investors')} are scored on <strong>${topKpis.join('</strong> and <strong>')}</strong>.` +
     `<div id="mandateRare" style="font-size:0.78rem;color:var(--dim);margin-top:0.35rem">${rareLine}</div>`;
 
   // Where you stand: value-anchored bars (mapped to an absolute scale, not a baseline
@@ -1017,11 +1069,12 @@ async function refreshBoard(world) {
   const herd0 = st.herd0 || st.herd, cap = st.landCap || herd0 * 1.5;
   const stake = RanchEngine.START_CASH || 6500000;
   const bars = [
-    { key: 'genetics', name: '$Beef', color: 'var(--tan)', pct: RanchEngine.clamp((db - 50) / 150, 0.02, 1),
+    { key: 'genetics', name: '$Beef', color: 'var(--ink)', pct: RanchEngine.clamp((db - 50) / 150, 0.02, 1),
       val: db + ' index', tip: 'dollarBeef' },
-    { key: 'herdGrowth', name: 'Herd', color: 'var(--sage)', pct: RanchEngine.clamp(st.herd / cap, 0.02, 1),
-      val: st.herd.toLocaleString() + ' / ' + cap.toLocaleString() + ' cap' },
-    { key: 'cash', name: 'Cash', color: 'var(--sky)', pct: RanchEngine.clamp(st.cash / stake, 0.02, 1),
+    // NO Herd bar here any more (9/11). The pictogram block below carries herd AND the
+    // room left under the land cap, and showing the same number as a bar and a count was
+    // the scanning problem, not the fix for it. Its objective star moved down with it.
+    { key: 'cash', name: 'Cash', color: 'var(--ink)', pct: RanchEngine.clamp(st.cash / stake, 0.02, 1),
       val: '$' + (st.cash / 1e6).toFixed(2) + 'M' },
   ];
   // O gate: hands owned vs required, and how much of the herd's genetics are actually
@@ -1035,21 +1088,110 @@ async function refreshBoard(world) {
   document.getElementById('boardKpis').innerHTML = bars.map(b => {
     const pri = !!arch.kpi[b.key];
     return `<div class="kpi-row"><span class="kpi-name">${b.tip ? g(b.tip, b.name) : b.name}` +
-      `${pri ? ` <span title="scored in your objective" style="color:${b.color}">★</span>` : ''}</span>` +
-      `<span class="kpi-track"><span class="kpi-fill" style="width:${Math.round(b.pct * 100)}%;background:${b.color};opacity:${pri ? 1 : 0.5}"></span></span>` +
-      `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${b.val}</span></div>`;
+      `${pri ? ` <span title="scored in your objective">★</span>` : ''}</span>` +
+      `<span class="meter thin" style="--v:${b.pct.toFixed(3)};opacity:${pri ? 1 : 0.55}"><i></i></span>` +
+      `<span class="kpi-val">${b.val}</span></div>`;
   }).join('') +
-    `<div class="kpi-row"><span class="kpi-name">Hands</span>` +
-    `<span class="kpi-track"><span class="kpi-fill" style="width:${Math.round(RanchEngine.clamp(util, 0.02, 1) * 100)}%;background:var(--rust);opacity:0.8"></span></span>` +
-    `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${st.hands.toFixed(1)} of ${handsReq.toFixed(1)} needed</span></div>` +
-    `<div class="kpi-row"><span class="kpi-name">Exploited</span>` +
-    `<span class="kpi-track"><span class="kpi-fill" style="width:${Math.round(util * 100)}%;background:var(--rust);opacity:0.8"></span></span>` +
-    `<span style="width:118px;text-align:right;color:var(--dim);flex-shrink:0">${Math.round(util * 100)}%</span></div>` +
-    (util < 1 ? `<div style="font-size:0.76rem;color:#d99079;margin-top:0.2rem">${(st.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length} bulls owned, only ${Math.round(util * 100)}% exploited. Understaffed: hire hands below.</div>` : '');
+    // The Hands and Exploited BARS used to sit here. Steven played a year on the live build
+    // with those bars on screen and still could not read his own staffing, so they are
+    // replaced by the countable crew/herd pictograms rather than sat alongside them: two
+    // renderings of the same number is what made the block hard to scan in the first place.
+    // The exploited % survives inside the note line, where it is attached to its cause.
+    outfitPictograms(st, handsReq, util, cap, !!arch.kpi.herdGrowth) +
+    (util < 1 ? `<div style="font-size:0.76rem;font-weight:700;margin-top:0.35rem">Understaffed: hire hands below.</div>` : '');
 
   renderHerdOptions(); renderCullOptions(); renderDebtOptions(); renderHireOptions(); renderTechOptions(); renderSemenOffers(); renderSemenSell(); renderTallowChoice();
   updateConsequence();
   refreshDeals();
+}
+
+// ---- Countable pictograms for crew and herd (Steven 9/11) ----------------------------
+// He played a year solo, started at 0.9 hands against a 3.0 requirement, and said the
+// standing state was not clear. The Hands and Exploited BARS were already on screen and
+// did not land, because a bar answers "what fraction" and his question was "how many".
+// These rows answer the count directly: one figure per hand the outfit needs, solid for
+// the hands on the payroll and ghosted for the hole; one steer per N head, solid for the
+// herd and ghosted for the room left under the land cap. No new art, plain inline SVG.
+
+// One ranch hand: hat brim, crown, head, shoulders. Deliberately blocky, because these
+// render at 18px on a projector at the back of a classroom.
+const GLYPH_HAND = { w: 18, h: 18, vb: '0 0 24 24', d:
+  'M3.6 8.2h16.8v1.7H3.6zM8.4 3.2h7.2v5H8.4zM12 9.4a3.1 3.1 0 110 6.2 3.1 3.1 0 010-6.2z' +
+  'M5.2 22.4v-3c0-2.5 3-4 6.8-4s6.8 1.5 6.8 4v3z' };
+// One steer: body, four legs, muzzle, one horn.
+const GLYPH_COW = { w: 22, h: 16, vb: '0 0 28 20', d:
+  'M6.4 5.8h11.4c2.6 0 4.2 1.5 4.2 3.8v2.6c0 1.1-.8 1.9-1.9 1.9H6.2C4.2 14.1 2.8 12.7 2.8 10.8V9.2c0-2 1.5-3.4 3.6-3.4z' +
+  'M4.4 13.9h1.9v4.7H4.4zM8.7 13.9h1.9v4.7H8.7zM15.6 13.9h1.9v4.7h-1.9zM19.6 13.9h1.9v4.7h-1.9z' +
+  'M21.8 6.1c1-1.5 2.4-2.2 4.1-2-.6 1.7-1.9 2.7-3.5 2.9z' };
+
+function glyphSvg(g, cls) {
+  return `<svg class="glyph${cls ? ' ' + cls : ''}" width="${g.w}" height="${g.h}" ` +
+    `viewBox="${g.vb}" fill="currentColor" aria-hidden="true"><path d="${g.d}"/></svg>`;
+}
+// a part-filled glyph: the ghost underneath, the solid clipped to `frac` of its width
+function glyphPart(g, frac) {
+  const px = Math.max(1, Math.round(g.w * Math.max(0, Math.min(1, frac))));
+  return `<span class="glyph-part" style="width:${g.w}px;height:${g.h}px">` +
+    glyphSvg(g, 'ghost') +
+    `<span class="clip" style="width:${px}px;height:${g.h}px">${glyphSvg(g)}</span></span>`;
+}
+// Rows of glyphs: `have` solid (fractional last one clipped), on up to `total` positions.
+function glyphRow(g, have, total, unit) {
+  const slots = Math.max(1, Math.ceil(total / unit));
+  const full = Math.floor(have / unit);
+  const frac = (have / unit) - full;
+  let out = '';
+  for (let i = 0; i < slots; i++) {
+    if (i < full) out += glyphSvg(g);
+    else if (i === full && frac > 0.03) out += glyphPart(g, frac);
+    else out += glyphSvg(g, 'ghost');
+  }
+  return out;
+}
+// Pick a round unit so a 2,350-head outfit does not draw 40 steers. Never returns a unit
+// that would draw fewer than 3 glyphs for a herd that exists, so the row still reads as a
+// count rather than a single lump.
+function glyphUnit(total) {
+  for (const u of [1, 5, 10, 25, 50, 100, 250, 500]) {
+    if (Math.ceil(total / u) <= 18) return u;
+  }
+  return 1000;
+}
+
+// Reads stored state only; no engine call beyond the handsRequired/utilization the caller
+// already computed for this year.
+function outfitPictograms(st, handsReq, util, cap, herdScored) {
+  const hands = st.hands || 0;
+  const shortBy = Math.max(0, handsReq - hands);
+  // crew: one figure per hand REQUIRED, so the empty figures are literally the hole
+  const crewTotal = Math.max(Math.ceil(handsReq), Math.ceil(hands), 1);
+  const crewRow = glyphRow(GLYPH_HAND, hands, crewTotal, 1);
+  const activeBulls = (st.bulls || []).filter(b => CUR_YEAR - b.boughtYear < 4).length;
+  // herd: solid to the herd, ghosted to the land cap, so the room left is visible too
+  const unit = glyphUnit(Math.max(cap, st.herd));
+  const herdRow = glyphRow(GLYPH_COW, st.herd, Math.max(cap, st.herd), unit);
+  const room = Math.max(0, cap - st.herd);
+  // Year 1 opens with no bulls, so handsRequired is 0 and "fully staffed for 0 working
+  // bulls" would be the first thing a team ever read here. Say what is actually true.
+  const note = activeBulls === 0
+    ? `<div class="pict-note">No bulls to manage yet. Hands you hire now are ready next year.</div>`
+    : shortBy > 0.05
+    ? `<div class="pict-note short">Short ${shortBy.toFixed(1)} ${shortBy < 1.05 ? 'hand' : 'hands'}. ` +
+      `Your ${activeBulls} working ${activeBulls === 1 ? 'bull is' : 'bulls are'} at ${Math.round(util * 100)}%.</div>`
+    : `<div class="pict-note">Fully staffed for ${activeBulls} working ${activeBulls === 1 ? 'bull' : 'bulls'}.</div>`;
+  return `<div class="pict-block">` +
+    `<div class="pict-row"><span class="pict-label">Crew</span>` +
+      `<span class="pict-glyphs">${crewRow}</span>` +
+      `<span class="pict-val">${hands.toFixed(1)} of ${handsReq.toFixed(1)}</span></div>` +
+    note +
+    `<div class="pict-row" style="margin-top:0.5rem"><span class="pict-label">Herd` +
+      // the objective star used to ride on the Herd bar; it follows the number down here
+      `${herdScored ? ' <span title="scored in your objective">★</span>' : ''}</span>` +
+      `<span class="pict-glyphs">${herdRow}</span>` +
+      `<span class="pict-val">${st.herd.toLocaleString()} hd</span></div>` +
+    `<div class="pict-key">each ${unit === 1 ? 'steer = 1 head' : 'steer = ' + unit.toLocaleString() + ' head'}` +
+      `${room > 0 ? ' · room for ' + room.toLocaleString() + ' more under the ' + g('landCap', 'land cap') : ' · at ' + g('landCap', 'land cap')}</div>` +
+    `</div>`;
 }
 
 // ---- Hire hands: the ONE labor decision (0/+1/+2), capped by region scarcity. Effective
@@ -1086,7 +1228,7 @@ function renderTallowChoice() {
     `<label class="opt${on ? ' on' : ''}" style="display:flex;align-items:center;gap:0.6rem;cursor:pointer;min-width:100%">` +
     `<input type="checkbox" ${on ? 'checked' : ''} onchange="setTallow(this.checked)" style="width:auto;margin:0">` +
     `<span><span class="opt-t">Run a rendering / ${g('tallow', 'tallow')} program</span>` +
-    `<span class="opt-d">~${Math.round(preview.culls)} ${g('cull', 'cull')} cows, net <b style="color:${preview.net >= 0 ? 'var(--sand)' : '#d99079'}">${money(preview.net)}</b> this year after the $${Math.round(preview.fee).toLocaleString()} ${preview.fee < RanchEngine.TALLOW.contractFee ? 'renewal' : 'setup'} fee.${droughtNote}</span></span></label>`;
+    `<span class="opt-d">~${Math.round(preview.culls)} ${g('cull', 'cull')} cows, net <b class="money ${preview.net >= 0 ? 'up' : 'down'}">${money(preview.net)}</b> this year after the $${Math.round(preview.fee).toLocaleString()} ${preview.fee < RanchEngine.TALLOW.contractFee ? 'renewal' : 'setup'} fee.${droughtNote}</span></span></label>`;
 }
 function setTallow(on) { boardChoice.tallow = !!on; renderTallowChoice(); updateConsequence(); }
 
@@ -1134,7 +1276,7 @@ function renderSemenSell() {
 function semenSellDemoText(demo, net, fee) {
   const f = fee == null ? RanchEngine.SEMEN_SELL.programFee : fee;
   const word = f < RanchEngine.SEMEN_SELL.programFee ? 'renewal' : 'program';
-  return `~${Math.round(demo.straws)} straws, net <b style="color:${net >= 0 ? 'var(--sand)' : '#d99079'}">${money(net)}</b> after the $${f.toLocaleString()} ${word} fee`;
+  return `~${Math.round(demo.straws)} straws, net <b class="money ${net >= 0 ? 'up' : 'down'}">${money(net)}</b> after the $${f.toLocaleString()} ${word} fee`;
 }
 // this bull's semen fee: full setup the first season listed, cheap renewal if listed last year too
 function semenFeeFor(b) {
@@ -1162,7 +1304,7 @@ function renderSemenOffers() {
   const st = boardBaseSt;
   if (CUR_YEAR < RanchEngine.UNLOCKS.tech) { el.innerHTML = lockedNote('AI semen programs open in year ' + RanchEngine.UNLOCKS.tech + ' with the genetics vendors.'); return; }
   if (st.semen && st.semen.boughtYear === CUR_YEAR) {
-    el.innerHTML = `<div style="font-size:0.82rem;color:var(--sage)">Booked ${esc(st.semen.name)} this season (conception rolled at breeding).</div>`;
+    el.innerHTML = `<div style="font-size:0.82rem">Booked ${esc(st.semen.name)} this season (conception rolled at breeding).</div>`;
     return;
   }
   if (!boardSemen.length) { el.innerHTML = '<span style="color:var(--muted);font-size:0.82rem">No semen offered this year.</span>'; return; }
@@ -1208,26 +1350,29 @@ function buildGeoMap(opts) {
   const W = opts.W || 512, H = opts.H || 340;
   if (!geo) { // fallback: crude state boxes
     let s = `<svg viewBox="0 0 512 400" xmlns="http://www.w3.org/2000/svg">`;
-    for (const st in ST_PATHS) s += `<path d="${ST_PATHS[st]}" fill="#2c2419" stroke="#4a4034" stroke-width="1.2"/>`;
+    for (const st in ST_PATHS) s += `<path d="${ST_PATHS[st]}" style="fill:var(--card2);stroke:var(--line2)" stroke-width="1.2"/>`;
     return s + '</svg>';
   }
   const proj = makeGeoProj(geo, W, H, 8);
   let svg = `<svg viewBox="0 0 ${W} ${H}" xmlns="http://www.w3.org/2000/svg">`;
   geo.states.features.forEach(f => geomPaths(f.geometry, proj).forEach(d =>
-    svg += `<path d="${d}" fill="#241e17" stroke="#4a4034" stroke-width="1"/>`));
+    svg += `<path d="${d}" style="fill:var(--card);stroke:var(--line2)" stroke-width="1"/>`));
   geo.counties.features.forEach(f => {
     const name = geoName(f.properties.name);
     const isHi = opts.highlight && name === opts.highlight;
     const avail = opts.available ? opts.available.has(name) : false;
     const dim = opts.available && !avail;
-    const fill = isHi ? (opts.highlightColor || '#bd7733') : dim ? '#241f18' : avail ? '#4a3a22' : '#3a3226';
+    const isSel = opts.selected && name === opts.selected;
+    const fill = isSel ? 'color-mix(in srgb, var(--world) 55%, var(--card))' : isHi ? (opts.highlightColor || 'var(--ink)') : dim ? 'var(--card)' : avail ? 'var(--line2)' : 'var(--card2)';
     const click = avail ? ` onclick="pickRanchByCounty('${name.replace(/'/g, '')}')" style="cursor:pointer"` : '';
     geomPaths(f.geometry, proj).forEach(d =>
-      svg += `<path d="${d}" fill="${fill}" stroke="${isHi ? '#f0dcc8' : '#5a4c38'}" stroke-width="${isHi ? 1.6 : 0.8}"${click}/>`);
+      svg += `<path d="${d}" style="fill:${fill};stroke:${isHi ? 'var(--bg)' : 'var(--line2)'}" stroke-width="${isHi ? 1.6 : 0.8}"${click}/>`);
     if (avail || isHi) {
       const c = geomCentroid(f.geometry, proj);
-      svg += `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="3.5" fill="#bd7733" pointer-events="none"/>`;
-      svg += `<text x="${c.x.toFixed(1)}" y="${(c.y - 7).toFixed(1)}" fill="#e0d4bf" font-size="10" font-family="monospace" text-anchor="middle" pointer-events="none">${esc(name.split(',')[0])}</text>`;
+      const cnt = opts.counts && opts.counts[name];
+      svg += `<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${cnt ? 7.5 : 3.5}" style="fill:${isHi ? 'var(--bg)' : 'var(--ink)'}" pointer-events="none"/>`;
+      if (cnt) svg += `<text x="${c.x.toFixed(1)}" y="${c.y.toFixed(1)}" style="fill:var(--bg);font-family:var(--font-mono)" font-size="9" font-weight="600" text-anchor="middle" dominant-baseline="central" pointer-events="none">${cnt}</text>`;
+      if (!opts.available || isSel) svg += `<text x="${c.x.toFixed(1)}" y="${(c.y - (cnt ? 11 : 7)).toFixed(1)}" style="fill:var(--ink);font-family:var(--font-mono)" font-size="11" text-anchor="middle" pointer-events="none">${esc(name.split(',')[0])}</text>`;
     }
   });
   return svg + '</svg>';
@@ -1237,7 +1382,7 @@ function renderBoardMap(st, w, sev) {
   document.getElementById('boardMap').innerHTML = buildGeoMap({ highlight: st.county, highlightColor: droughtColor(sev) });
   const word = sev >= 1.0 ? 'severe' : sev >= 0.5 ? 'moderate' : 'mild';
   document.getElementById('boardMapLegend').innerHTML =
-    `<span style="color:${droughtColor(sev)};font-weight:bold">&#9679;</span> ${esc((st.county || '').split(',')[0])}: ${word} drought (${g('droughtExposure', 'exposure')} ${RanchEngine.REGIONS[st.region].droughtExposure}x)`;
+    `${esc((st.county || '').split(',')[0])} &middot; ${word} ${g('drought', 'drought')}, ${g('droughtExposure', 'exposure')} ${RanchEngine.REGIONS[st.region].droughtExposure}x`;
 }
 
 function optCard(group, mode, title, desc, on) {
@@ -1275,10 +1420,10 @@ function renderCullOptions() {
   const gAvg = RanchEngine.avg(RanchEngine.TRAITS.map(t => st.g[t]));
   const geneLift = Math.max(0, (RanchEngine.CULL_CEIL - gAvg) * F.genetics.gain);
   const cards = [
-    ['fertility', 'Fertility', 'Open cows go. Calving rate +' + (F.fertility.rate * 100).toFixed(1) + ' pts per year of focus, up to ' + F.fertility.cap + ' years.'],
-    ['structure', 'Feet and udders', 'Unsound cows go. Cow cost -' + (F.structure.cowCost * 100).toFixed(1) + '% per year of focus (up to ' + F.structure.cap + '), and herd bulls are lost half as often.'],
-    ['genetics', 'Genetics', 'The genetic bottom goes. Herd traits +' + geneLift.toFixed(2) + ' this year (selection alone plateaus at ' + RanchEngine.CULL_CEIL + ').'],
-    ['disposition', 'Disposition', 'The wild ones go. Quiet cattle need ' + (F.disposition.hands * 100).toFixed(0) + '% fewer hands per year of focus, up to ' + F.disposition.cap + ' years.'],
+    ['fertility', g('cullMore', 'More calves'), 'Open cows go. Calving rate +' + (F.fertility.rate * 100).toFixed(1) + ' pts per year of focus, up to ' + F.fertility.cap + ' years.'],
+    ['structure', g('cullLast', 'Cows that last'), 'Unsound cows go. Cow cost -' + (F.structure.cowCost * 100).toFixed(1) + '% per year of focus (up to ' + F.structure.cap + '), and herd bulls are lost half as often.'],
+    ['genetics', g('cullBetter', 'Better calves'), 'The genetic bottom goes. Herd traits +' + geneLift.toFixed(2) + ' this year (selection alone plateaus at ' + RanchEngine.CULL_CEIL + ').'],
+    ['disposition', g('cullEasy', 'Easier handling'), 'The wild ones go. Quiet cattle need ' + (F.disposition.hands * 100).toFixed(0) + '% fewer hands per year of focus, up to ' + F.disposition.cap + ' years.'],
   ];
   el.innerHTML = cards.map(([k, title, d]) =>
     optCard('cull', k, title + (n(k) ? ' (' + n(k) + ' yr' + (n(k) === 1 ? '' : 's') + ' so far)' : ''), d, boardChoice.cull === k)).join('');
@@ -1593,9 +1738,9 @@ function renderTechOptions() {
     const on = boardChoice.techs.includes(t);
     // color set explicitly: without it the pill inherits the global button's white text
     return `<button type="button" class="techpill${on ? ' on' : ''}" data-tech="${t}" onclick="setChoice('tech','${t}')" ` +
-      `style="margin:3px;padding:0.4rem 0.65rem;border:1px solid var(--border);border-radius:14px;` +
-      `background:${on ? 'var(--accent)' : 'var(--surface2)'};color:${on ? '#1a1510' : 'var(--text)'};cursor:pointer;font-size:0.8rem">` +
-      `${TECH_LABEL[t]} <span style="color:${on ? '#3a2c10' : 'var(--muted)'}">$${(RanchEngine.TECHS[t].capex / 1000)}k, ${fitWord}</span></button>`;
+      `style="margin:3px;padding:0.5rem 0.8rem;min-height:2.5rem;border:1px solid var(--line2);border-radius:999px;` +
+      `background:${on ? 'var(--ink)' : 'var(--card)'};color:${on ? 'var(--bg)' : 'var(--ink)'};cursor:pointer;font-size:0.8rem">` +
+      `${TECH_LABEL[t]} <span style="color:${on ? 'var(--bg)' : 'var(--muted)'};font-family:var(--mono)">$${(RanchEngine.TECHS[t].capex / 1000)}k, ${fitWord}</span></button>`;
   }).join('') || '<span style="color:var(--muted);font-size:0.82rem">You already run every technology.</span>';
 }
 
@@ -1724,6 +1869,7 @@ async function submitPlay() {
         debt: boardChoice.debt, techs: boardChoice.techs, bids: upserts.length });
 
     const warn = overCash ? ' Note: a bid tops your cash, so winning it would force a fire sale.' : '';
+    _journeyLocked = true; setJourney(PHASE);
     msg('Year locked: ' + r.herd.toLocaleString() + ' head, $' + Math.round(r.cash).toLocaleString() + ' cash, ' + upserts.length + ' bid' + (upserts.length === 1 ? '' : 's') + '. Revise until the year resolves.' + warn, 'ok');
     await refreshMyStats();
   } finally {
@@ -1734,7 +1880,7 @@ async function submitPlay() {
 // ---- Auction ----
 const TRAIT_LABEL = { ce: 'Calving ease', growth: 'Growth', marb: 'Marbling', forage: 'Forage eff', milk: 'Milk / maternal' };
 function emphasis(v) { return v >= 1.4 ? 'High' : v >= 0.8 ? 'Med' : 'Low'; }
-function emphColor(v) { return v >= 1.4 ? '#2e7d32' : v >= 0.8 ? '#a06a1b' : '#999'; }
+function emphColor(v) { return v >= 1.4 ? 'var(--ink)' : v >= 0.8 ? 'var(--mute)' : 'var(--line2)'; }
 // pre-bid telegraphing (Into the Breach rule: show the consequence before the commit)
 let AUCTION_CASH = 0, AUCTION_SLOTS = 0, AUCTION_LOTS = 0;
 // view events (Item 5): log the open once per year per target, never per poll tick
@@ -1753,7 +1899,7 @@ function updateBidConseq(bullId) {
   const left = AUCTION_CASH - v;
   const others = Math.max(0, AUCTION_LOTS - 1);
   el.innerHTML = v > AUCTION_CASH
-    ? `<span style="color:#d99079">That is $${Math.round(v - AUCTION_CASH).toLocaleString()} more cash than you have.</span>`
+    ? `<span style="font-weight:700">That is $${Math.round(v - AUCTION_CASH).toLocaleString()} more cash than you have.</span>`
     : `Win at this price and cash drops to <b>$${Math.round(left).toLocaleString()}</b>` +
       (others ? ` with ${others} other lot${others > 1 ? 's' : ''} still in the sale.` : `.`);
   updateExposure();
@@ -1775,9 +1921,9 @@ function updateExposure() {
   const opsBit = opsSpend > 0 ? `operations <b>$${Math.round(opsSpend).toLocaleString()}</b> + ` : '';
   el.innerHTML =
     `Cash <b>$${Math.round(AUCTION_CASH).toLocaleString()}</b>, ${slots}.<br>` +
-    `Spending this year: ${opsBit}bids <b style="${over ? 'color:#d99079' : ''}">$${Math.round(bidTotal).toLocaleString()}</b> = ` +
+    `Spending this year: ${opsBit}bids <b style="${over ? 'color:var(--down)' : ''}">$${Math.round(bidTotal).toLocaleString()}</b> = ` +
     `<b>$${Math.round(grand).toLocaleString()}</b> total.` +
-    (over ? ` <span style="color:#d99079">Bids exceed your cash: the sale can bust you.</span>` : ``);
+    (over ? ` <span style="font-weight:700">Bids exceed your cash: the sale can bust you.</span>` : ``);
 }
 
 // ---- View events via IntersectionObserver (Item 5) ----
@@ -1858,11 +2004,11 @@ function bullDollarBeef(b) {
 }
 // where a herd trait sits on the 1-10 genetic scale, in words a student can read
 function herdLevel(v) {
-  if (v >= 7.0) return { word: 'elite', color: '#e8b84a' };
-  if (v >= 6.0) return { word: 'strong', color: '#acc87a' };
-  if (v >= 4.7) return { word: 'average', color: '#ab9c82' };
-  if (v >= 3.8) return { word: 'below avg', color: '#c98a2b' };
-  return { word: 'weak', color: '#d99079' };
+  if (v >= 7.0) return { word: 'elite', color: 'var(--ink)' };
+  if (v >= 6.0) return { word: 'strong', color: 'var(--ink)' };
+  if (v >= 4.7) return { word: 'average', color: 'var(--mute)' };
+  if (v >= 3.8) return { word: 'below avg', color: 'var(--mute)' };
+  return { word: 'weak', color: 'var(--mute)' };
 }
 function renderHerdPanel(st) {
   const el = document.getElementById('auctionHerd');
@@ -1884,11 +2030,10 @@ function renderHerdPanel(st) {
     `<div style="border:1px solid var(--border);border-radius:5px;padding:0.7rem 0.9rem;background:var(--surface2)">
       <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:0.4rem">
         <div style="font-size:0.8rem;color:var(--muted)">Your herd at <strong>${esc(st.county || '')}</strong></div>
-        <div style="font-size:0.82rem">${g('dollarBeef', '$Beef')}: <strong style="font-family:var(--mono);color:var(--accent)">${db}</strong></div>
+        <div style="font-size:0.82rem">${g('dollarBeef', '$Beef')}: <strong style="font-family:var(--mono)">${db}</strong></div>
       </div>
       <div style="font-size:0.76rem;color:var(--muted);margin-bottom:0.5rem">
-        A bull helps most when its trait <strong>beats your herd number</strong> and that trait reads High for your county or objective.
-        "Your herd" shows where you sit today on the genetic scale.
+        A bull helps most where his trait beats your herd and reads High for your county or objective.
       </div>
       <table style="width:100%;font-size:0.82rem;border-collapse:collapse">
         <thead><tr>
@@ -1917,19 +2062,19 @@ function renderBullCards(bulls, world, st, bidMap) {
     const tierClass = 'tag-' + b.tier;
     const existing = bidMap ? bidMap[b.id] : undefined;
     const div = document.createElement('div');
-    div.style.cssText = 'border:1px solid var(--border);border-radius:5px;padding:0;margin-bottom:0.9rem;background:var(--surface);overflow:hidden';
+    div.className = 'card lot';
     div.innerHTML =
       // sale-catalog photo plate (representative image; the lots are generated)
       bullPhotoPlate(b, idx) +
-      `<div style="padding:0.7rem 1rem 0.9rem">` +
-      `<div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.15rem">` +
-        `<span style="font-family:var(--mono);font-size:0.7rem;color:var(--dim);letter-spacing:0.08em">LOT ${idx + 1}</span>` +
-        `<strong style="font-family:var(--serif);font-size:1.05rem">${esc(b.name || b.sire)}</strong>` +
+      `<div class="body">` +
+      `<div style="display:flex;align-items:baseline;gap:0.5rem;margin-bottom:0.15rem;flex-wrap:wrap">` +
+        `<span class="lotno">LOT ${idx + 1}</span>` +
+        `<strong class="name">${esc(b.name || b.sire)}</strong>` +
         `<span class="tag ${tierClass}" style="margin-left:auto">${b.tier}</span>` +
       `</div>` +
       // liquidation lot: a busted rival's herd sire, back in the ring (Steven 9/07)
       ((b.meta && b.meta.liquidation)
-        ? `<div style="font-size:0.76rem;color:#d99079;margin-bottom:0.25rem"><b>Liquidation lot</b>: from ${esc(b.meta.liquidation.from || 'a busted outfit')}, ` +
+        ? `<div style="font-size:0.76rem;margin-bottom:0.25rem"><b>Liquidation lot</b>: from ${esc(b.meta.liquidation.from || 'a busted outfit')}, ` +
           `bought in Year ${b.meta.liquidation.boughtYear}` +
           (b.meta.liquidation.paid ? ` for $${Math.round(b.meta.liquidation.paid).toLocaleString()}` : '') +
           `. The bank wants its money; reserve unchanged.</div>`
@@ -1942,14 +2087,14 @@ function renderBullCards(bulls, world, st, bidMap) {
           g('epd', 'EPD') + ': ' +
           ['ced', 'ww', 'yw', 'milk', 'marb'].filter(k => b.meta.epds[k] !== null && b.meta.epds[k] !== undefined)
             .map(k => k.toUpperCase() + ' ' + b.meta.epds[k]).join(' | ') +
-          (bullDollarBeef(b) !== null ? ` <span style="color:var(--accent)">| ${g('dollarBeef', '$B')} ${bullDollarBeef(b)}</span>` : '') + `</div>`
+          (bullDollarBeef(b) !== null ? ` <span style="color:var(--ink)">| ${g('dollarBeef', '$B')} ${bullDollarBeef(b)}</span>` : '') + `</div>`
         : `<div style="margin-bottom:0.35rem"></div>`) +
       `<div class="epd-grid" style="margin-bottom:0.5rem">` +
         Object.entries(b.catalog).map(([k, v]) => {
           // mark traits where this bull beats your current herd (an upgrade for you)
           const up = herd && v > (herd[k] || 0) + 0.3;
           return `<div class="epd-bar-wrap">${TRAIT_LABEL[k] || k}: <span class="epd-bar" style="width:${Math.round(v * 12)}px"></span> ${Number(v).toFixed(1)}` +
-            (up ? ` <span style="color:#2e7d32;font-weight:600">+</span>` : '') + `</div>`;
+            (up ? ` <span style="font-weight:700">+</span>` : '') + `</div>`;
         }).join('') +
       `</div>` +
       `<div class="range-note">Typical range at this ${g('tier', 'tier')}: $${lo.toLocaleString()} to $${hi.toLocaleString()} (${g('anchor', 'anchor')} $${Math.round(b.anchor).toLocaleString()}, ${g('reserve', 'reserve')} $${Math.round(b.reserve).toLocaleString()})</div>` +
@@ -1994,17 +2139,17 @@ function bullPhotoPlate(b, idx) {
   if (src) {
     // contain (not cover) so the whole bull always shows; the dark plate letterboxes
     // the odd portrait shot instead of cropping the animal's head or feet off
-    return `<div style="position:relative;height:150px;background:#12100c;display:flex;align-items:center;justify-content:center">` +
-      `<img src="${src}" alt="Angus bull" style="max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain;display:block;opacity:0.97">` +
-      `<span style="position:absolute;bottom:0;left:0;right:0;background:linear-gradient(transparent,rgba(18,16,12,0.85));color:#cbb890;font-size:0.62rem;font-family:var(--mono);padding:0.5rem 0.6rem 0.3rem">Representative image, not this exact lot</span>` +
+    return `<div class="plate">` +
+      `<img src="${src}" alt="Angus bull">` +
+      `<span>Representative image, not this exact lot</span>` +
       `</div>`;
   }
   // fallback until the photo set is added: a catalog frame with a simple bull mark
-  return `<div style="height:96px;background:#1d1811;display:flex;align-items:center;justify-content:center;border-bottom:1px solid var(--border)">` +
-    `<svg width="80" height="52" viewBox="0 0 80 52" fill="none" stroke="#5a4c38" stroke-width="2">` +
+  return `<div class="plate" style="height:96px;border-bottom:1px solid var(--border)">` +
+    `<svg width="80" height="52" viewBox="0 0 80 52" fill="none" style="stroke:var(--line2)" stroke-width="2">` +
     `<path d="M16 34 q-6 -14 6 -18 q4 -8 10 -4 q8 -4 16 0 q6 -4 10 4 q12 4 6 18 l-4 10 h-8 l-2 -8 h-20 l-2 8 h-8 z"/>` +
     `<path d="M20 16 l-4 -8 M60 16 l4 -8" stroke-linecap="round"/></svg>` +
-    `<span style="color:#5a4c38;font-family:var(--mono);font-size:0.6rem;margin-left:0.5rem">SALE PHOTO</span></div>`;
+    `<span style="position:static;margin-left:0.5rem">SALE PHOTO</span></div>`;
 }
 
 async function submitBid(bullId, reserve) {
@@ -2057,8 +2202,7 @@ async function showBusted() {
   const why = BUSTED.reason === 'equity'
     ? 'the operation was worth less than it owed'
     : 'two straight years closed with the account overdrawn';
-  let html = `<div style="font-family:var(--serif);font-size:1.25rem;color:#d99079;margin-bottom:0.5rem">` +
-    `The bank foreclosed after Year ${BUSTED.year}.</div>` +
+  let html = `<h3 style="margin-bottom:0.5rem">The bank foreclosed after Year ${BUSTED.year}.</h3>` +
     `<div style="font-size:0.9rem;margin-bottom:0.8rem">Cash closed at <b>$${Number(BUSTED.cash || 0).toLocaleString()}</b> and ${why}. ` +
     `The cows went to the bank` +
     (BUSTED.bullsToRing ? ` and your ${BUSTED.bullsToRing} herd sire${BUSTED.bullsToRing === 1 ? '' : 's'} went to the Year ${BUSTED.year + 1} ring as liquidation lots for the other outfits to bid on.` : `.`) +
@@ -2096,14 +2240,14 @@ async function yearResultsHtml(yr, world) {
     .eq('game_id', GAME_ID).eq('team_id', TEAM_ID).eq('year', yr).eq('kind', 'board_submitted');
   const wasAutoLocked = (myDecs || []).some(d => d.payload && d.payload.auto_locked);
   let html = wasAutoLocked
-    ? `<div style="background:#351d18;color:#d99079;border:1px solid #5a3128;border-radius:5px;padding:0.6rem 0.85rem;margin-bottom:0.8rem;font-size:0.86rem">` +
+    ? `<div style="background:var(--card2);font-weight:700;border:1px solid var(--line2);border-radius:5px;padding:0.6rem 0.85rem;margin-bottom:0.8rem;font-size:0.86rem">` +
       `Time ran out; your defaults were used.</div>`
     : '';
-  html += `<div style="font-family:var(--serif);font-size:1.2rem;margin-bottom:0.6rem;color:var(--accent)">` +
+  html += `<div style="font-family:var(--serif);font-size:1.2rem;font-weight:600;margin-bottom:0.6rem">` +
     (won.length ? `You won ${won.length} bull${won.length > 1 ? 's' : ''} for $${Math.round(spent).toLocaleString()}.` : `You won no bulls this year.`) +
     `</div>`;
 
-  html += `<table style="margin-bottom:0.8rem"><thead><tr>` +
+  html += `<div class="table-wrap"><table style="margin-bottom:0.8rem"><thead><tr>` +
     `<th>Lot</th><th>Bull</th><th>Tier</th><th>Winner</th><th>Price</th><th>Your bid</th></tr></thead><tbody>`;
   (bulls || []).forEach((b, i) => {
     const mine = b.winner_team === TEAM_ID;
@@ -2116,13 +2260,13 @@ async function yearResultsHtml(yr, world) {
       bidCell = '$' + Math.round(mb).toLocaleString();
       if (!mine && b.price) bidCell += ` <span style="color:var(--muted)">(short $${Math.round(b.price - mb).toLocaleString()})</span>`;
     }
-    html += `<tr${mine ? ' style="background:#2f2513"' : ''}>` +
+    html += `<tr${mine ? ' style="background:var(--card2)"' : ''}>` +
       `<td style="font-family:var(--mono)">${i + 1}</td><td>${esc(b.name || b.sire)}</td>` +
       `<td><span class="tag tag-${b.tier}">${b.tier}</span></td><td>${winner}</td>` +
       `<td style="font-family:var(--mono)">${b.price ? '$' + Math.round(b.price).toLocaleString() : '-'}</td>` +
       `<td style="font-family:var(--mono)">${bidCell}</td></tr>`;
   });
-  html += `</tbody></table>`;
+  html += `</tbody></table></div>`;
 
   if (st) {
     const gAvg = RanchEngine.avg(RanchEngine.TRAITS.map(t => st.g[t]));
@@ -2131,7 +2275,7 @@ async function yearResultsHtml(yr, world) {
       `<strong style="color:var(--text)">$${Math.round(st.cash).toLocaleString()}</strong>, ` +
       `debt $${Math.round(st.debt).toLocaleString()}, ${g('dollarBeef', '$Beef')} ${RanchEngine.dollarBeef(st.g)}, reputation ${Math.round(st.rep)}.</div>`;
     if (st.lastBullDeaths > 0) {
-      html += `<div style="font-size:0.82rem;color:#d99079;margin-top:0.3rem">You lost ${st.lastBullDeaths} herd bull${st.lastBullDeaths > 1 ? 's' : ''} this year. That ${g('coverage', 'coverage')} is gone until you buy or trade for a replacement.</div>`;
+      html += `<div style="font-size:0.82rem;font-weight:700;margin-top:0.3rem">You lost ${st.lastBullDeaths} herd bull${st.lastBullDeaths > 1 ? 's' : ''} this year. That ${g('coverage', 'coverage')} is gone until you buy or trade for a replacement.</div>`;
     }
     html += booksCard(st, world);
   }
@@ -2174,8 +2318,8 @@ async function winnersCurseDebrief(nameById) {
     const surprise = trueB - catB;                 // + = better than advertised, - = the curse
     const mine = b.winner_team === TEAM_ID;
     if (mine) { mySurprise += surprise; myN++; mySpend += Number(b.price || 0); }
-    const col = surprise >= 6 ? '#acc87a' : surprise <= -6 ? '#d99079' : 'var(--dim)';
-    rows += `<tr${mine ? ' style="background:#2f2513"' : ''}>` +
+    const col = surprise >= 6 ? 'var(--up)' : surprise <= -6 ? 'var(--down)' : 'var(--dim)';
+    rows += `<tr${mine ? ' style="background:var(--card2)"' : ''}>` +
       `<td style="font-family:var(--mono)">Y${b.year}</td>` +
       `<td>${esc(b.name || b.sire)}</td>` +
       `<td><span class="tag tag-${b.tier}">${b.tier}</span></td>` +
@@ -2195,16 +2339,16 @@ async function winnersCurseDebrief(nameById) {
     : `Every lot a rival won was bought for a reason you could not see from the price. That is what a competitor sees looking at Hermes: the outcome is public, the reason is not. The standings below now reveal every outfit's objective. Could you have told from the bidding alone which outfit ran which objective?`;
   const avg = myN ? (mySurprise / myN) : 0;
   const verdict = !myN ? 'You bought no bulls at auction, so there is nothing here to read.'
-    : avg <= -4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won ($${Math.round(mySpend).toLocaleString()}), the true genetics averaged <b style="color:#d99079">${avg.toFixed(0)} $Beef below</b> the catalog. That is the winner\'s catalog read a little rich on the lots you took home.`
-    : avg >= 4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won, the true genetics averaged <b style="color:#acc87a">+${avg.toFixed(0)} $Beef above</b> catalog. The lots you took home ran better than advertised.`
+    : avg <= -4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won ($${Math.round(mySpend).toLocaleString()}), the true genetics averaged <b style="color:var(--down)">${avg.toFixed(0)} $Beef below</b> the catalog. That is the winner\'s catalog read a little rich on the lots you took home.`
+    : avg >= 4 ? `On the ${myN} bull${myN > 1 ? 's' : ''} you won, the true genetics averaged <b style="color:var(--up)">+${avg.toFixed(0)} $Beef above</b> catalog. The lots you took home ran better than advertised.`
     : `On the ${myN} bull${myN > 1 ? 's' : ''} you won, true genetics landed within ${Math.abs(avg).toFixed(0)} $Beef of the catalog on average. The catalog described your bulls well.`;
   return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--surface2);padding:0.85rem 1rem;margin-top:0.9rem">` +
     `<div style="font-family:var(--serif);font-weight:700;font-size:1rem;color:var(--tan);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.55rem">What You Paid and What You Got</div>` +
     `<div style="font-size:0.8rem;color:var(--dim);margin-bottom:0.6rem">${verdict}</div>` +
     `<div style="font-size:0.78rem;color:var(--muted);margin-bottom:0.6rem">Surprises here are small on purpose. The catalog describes the animal well. The money in this sale rode on which traits your country and your strategy could use, and on whether you were staffed to put those genetics to work.</div>` +
-    `<div id="debriefAmbiguity" style="font-size:0.8rem;color:var(--text);border-left:3px solid var(--sage);padding:0.4rem 0.7rem;margin-bottom:0.7rem;background:var(--surface)">` +
-    `<span style="font-family:var(--mono);font-size:0.66rem;color:var(--sage);letter-spacing:0.08em;text-transform:uppercase">Debrief question, causal ambiguity</span><br>${ambiguityQ}</div>` +
-    `<div style="overflow-x:auto"><table style="width:100%;font-size:0.8rem"><thead><tr>` +
+    `<div id="debriefAmbiguity" style="font-size:0.8rem;color:var(--text);border-left:3px solid var(--ink);padding:0.4rem 0.7rem;margin-bottom:0.7rem;background:var(--surface)">` +
+    `<span class="k">Debrief question, causal ambiguity</span><br>${ambiguityQ}</div>` +
+    `<div class="table-wrap"><table style="width:100%;font-size:0.8rem"><thead><tr>` +
     `<th>Yr</th><th>Bull</th><th>Tier</th><th>Winner</th><th>${g('dollarBeef', 'Cat $B')}</th><th>True $B</th><th>Surprise</th><th>Price</th>` +
     `</tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
@@ -2227,7 +2371,7 @@ function robustnessReplay(st, world) {
     RanchEngine.productionYear(r, w);
     const net = r.lastStmt ? r.lastStmt.net : (r.cash - st.cash);
     const eq = RanchEngine.equity(r, w);
-    const col = net >= 0 ? 'var(--sand)' : '#d99079';
+    const col = net >= 0 ? 'var(--up)' : 'var(--down)';
     return `<tr><td>${sc.label}</td>` +
       `<td style="font-family:var(--mono);color:${col}">${money(net)}</td>` +
       `<td style="font-family:var(--mono)">${r.herd.toLocaleString()} hd</td>` +
@@ -2268,7 +2412,7 @@ function exitSurveyHtml() {
       `<label for="survQ3" style="display:block;font-size:0.82rem;color:var(--muted);margin-bottom:0.25rem">3. What would you do differently with one more year?</label>` +
       `<input type="text" id="survQ3" maxlength="280" placeholder="One line" style="margin-bottom:0">` +
     `</div>` +
-    `<button id="btnSurveySubmit" onclick="submitExitSurvey()">Submit survey</button>` +
+    `<button id="btnSurveySubmit" class="btn act" onclick="submitExitSurvey()">Submit survey</button>` +
     `<div id="surveyMsg" style="font-size:0.8rem;margin-top:0.5rem"></div>` +
   `</div>`;
 }
@@ -2282,7 +2426,7 @@ async function submitExitSurvey() {
   const q3 = (document.getElementById('survQ3') || {}).value ? document.getElementById('survQ3').value.trim() : '';
   const surveyMsg = document.getElementById('surveyMsg');
   if (!q1 || !SURVEY_Q2 || !q3) {
-    if (surveyMsg) { surveyMsg.textContent = 'Answer all three questions before submitting.'; surveyMsg.style.color = '#d99079'; }
+    if (surveyMsg) { surveyMsg.textContent = 'Answer all three questions before submitting.'; surveyMsg.style.fontWeight = '700'; }
     return;
   }
   SURVEY_SUBMITTING = true;
@@ -2300,7 +2444,7 @@ async function submitExitSurvey() {
   } catch (e) {
     SURVEY_SUBMITTING = false;
     if (btn) btn.disabled = false;
-    if (surveyMsg) { surveyMsg.textContent = 'Could not submit, try again.'; surveyMsg.style.color = '#d99079'; }
+    if (surveyMsg) { surveyMsg.textContent = 'Could not submit, try again.'; surveyMsg.style.fontWeight = '700'; }
   }
 }
 
@@ -2338,7 +2482,7 @@ function booksCard(st, w) {
       (s.interest > 0 ? row(g('interest', 'Interest on debt'), -s.interest) : '') +
       row('Net for the year', s.net, { rule: true, strong: true }) +
       `</table>` +
-      (s.hands != null ? `<div style="font-size:0.72rem;margin-top:0.35rem;color:${s.utilPenalty > 0 ? '#d99079' : 'var(--muted)'}">` +
+      (s.hands != null ? `<div style="font-size:0.72rem;margin-top:0.35rem;color:var(--muted)">` +
         (s.cullFocus ? `Culled for ${RanchEngine.CULL_FOCUS[s.cullFocus] ? RanchEngine.CULL_FOCUS[s.cullFocus].label.toLowerCase() : s.cullFocus} (year ${(s.cullYears && s.cullYears[s.cullFocus]) || 1} of focus). ` : '') +
         `${s.hands} hands managing ${s.activeBulls} active bull${s.activeBulls === 1 ? '' : 's'}, ${Math.round((s.utilization || 0) * 100)}% exploited` +
         (s.utilPenalty > 0 ? `. Understaffing cost ~${money(s.utilPenalty)} of genetics this year.` : '.') +
@@ -2380,10 +2524,10 @@ function cattlemensWeekly(w, bulls, teams, myState, nameById, yr) {
   const states = teams.map(t => ({ name: t.name, st: t.state ? reviveState(t.state) : null, isMe: t.id === TEAM_ID }))
     .filter(x => x.st && !(x.st.busted && x.st.busted.year < Y));
   const bustLine = states.filter(x => x.st.busted && x.st.busted.year === Y).map(x =>
-    `<div style="font-size:0.85rem;color:#d99079;margin-top:0.4rem"><b>${esc(x.name)}${x.isMe ? ' (you)' : ''}</b> went under this year` +
+    `<div style="font-size:0.85rem;margin-top:0.4rem"><b>${esc(x.name)}${x.isMe ? ' (you)' : ''}</b> went under this year` +
     (x.st.busted.bullsToRing ? `; ${x.st.busted.bullsToRing} herd sire${x.st.busted.bullsToRing === 1 ? '' : 's'} go to next year's ring as liquidation lots.` : '.') + `</div>`).join('');
   const rows = states.filter(x => !x.st.busted).slice().sort((a, b) => b.st.herd - a.st.herd).map(x =>
-    `<tr${x.isMe ? ' style="background:#2f2513"' : ''}><td>${esc(x.name)}${x.isMe ? ' (you)' : ''}</td>` +
+    `<tr${x.isMe ? ' style="background:var(--card2)"' : ''}><td>${esc(x.name)}${x.isMe ? ' (you)' : ''}</td>` +
     `<td style="font-family:var(--mono)">${x.st.herd.toLocaleString()}</td>` +
     `<td style="font-family:var(--mono)">${(x.st.bulls || []).filter(b => Y - b.boughtYear < 4).length}</td>` +
     `<td style="font-family:var(--mono)">${Math.round(x.st.rep || 0)}</td></tr>`).join('');
@@ -2425,8 +2569,8 @@ function cattlemensWeekly(w, bulls, teams, myState, nameById, yr) {
       ? `The bull sale grossed <b style="font-family:var(--mono)">$${Math.round(gross).toLocaleString()}</b> on ${sold.length} of ${bulls.length} lots` +
         (top ? `, topped by ${esc(top.name || top.sire)} at <b style="font-family:var(--mono)">$${Math.round(top.price).toLocaleString()}</b> to ${esc(nameById[top.winner_team] || 'a ranch')}.` : `.`)
       : `Every lot in the bull sale went home unsold, a no-sale year.`) + `</div>` + bustLine +
-    `<table style="margin-top:0.55rem;font-size:0.8rem"><thead><tr><th>Outfit</th><th>Herd</th><th>Herd sires</th><th>${g('reputation', 'Rep')}</th></tr></thead>` +
-    `<tbody>${rows}</tbody></table>` +
+    `<div class="table-wrap"><table style="margin-top:0.55rem;font-size:0.8rem"><thead><tr><th>Outfit</th><th>Herd</th><th>Herd sires</th><th>${g('reputation', 'Rep')}</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table></div>` +
     books + outlook + `</div>`;
 }
 
@@ -2495,10 +2639,10 @@ async function refreshStandings() {
     const barW = Math.max(2, Math.round(r.cash / maxCash * 100));
     tr.style.fontWeight = r.isMe ? 'bold' : '';
     const archTag = reveal ? ` <span class="reveal-arch" style="font-family:var(--mono);font-size:0.68rem;color:var(--tan);letter-spacing:0.04em">ran ${esc(RanchEngine.ARCHETYPES[r.arch]?.label || r.arch || '?')}</span>` : '';
-    const bustTag = r.busted ? ` <span style="font-family:var(--mono);font-size:0.68rem;color:#d99079;letter-spacing:0.04em">busted yr ${r.busted}</span>` : '';
+    const bustTag = r.busted ? ` <span class="tag">busted yr ${r.busted}</span>` : '';
     const split = (r.scoreRank && r.cashRank && r.scoreRank !== r.cashRank);
     tr.innerHTML = `<td><b>${r.scoreRank || '-'}</b></td>` +
-      `<td${split ? ' style="color:#d99079;font-weight:bold"' : ''}>${r.cashRank || '-'}</td>` +
+      `<td${split ? ' style="font-weight:bold"' : ''}>${r.cashRank || '-'}</td>` +
       `<td>${esc(r.name)}${r.isMe ? ' (you)' : ''}${archTag}${bustTag}</td>` +
       `<td>${r.busted ? '-' : '$' + r.cash.toLocaleString()}</td>` +
       `<td><span class="lb-bar" style="width:${r.busted ? 2 : barW}px"></span></td>`;

@@ -39,7 +39,22 @@ const DISCOUNT = 0.92;
 // first board meeting is not overloaded before players know the game; year 2+ is the
 // full 6-lot median sale. BULLS_PER_YEAR stays as the engine default for compatibility
 // with anything that reads the flat constant.
-function bullsForYear(year) { return year <= 1 ? 4 : BULLS_PER_YEAR; }
+//
+// CATALOGUE TO THE BUYER BASE (2026-09-11). Steven played solo against 5 bots and watched
+// half the sale no-sale: 15 of 28 lots, worsening every year. The flat six-lot book was
+// the cause. A full class of eight outfits absorbs six lots a year comfortably (12-13%
+// unsold, measured); a five-outfit field does not (29%), because appetite saturates as
+// herds fill with genetics and a bull that is no better than the commodity bull draws the
+// $4,000 floor bid, which never clears a reserve. A real seedstock operation does not
+// consign six bulls into a room that wants three; it catalogues to who is coming.
+// nBidders counts every outfit that can actually bid this year: human teams plus AI whose
+// archetype has bidCashCap > 0, minus anyone busted. Omit it and the old flat rule stands,
+// so a caller that has not been updated behaves exactly as before.
+function bullsForYear(year, nBidders) {
+  if (year <= 1) return Math.min(4, BULLS_PER_YEAR);
+  if (typeof nBidders !== 'number' || !(nBidders > 0)) return BULLS_PER_YEAR;
+  return clamp(Math.round(nBidders * 0.8), 3, BULLS_PER_YEAR);
+}
 
 // ---------- regions (price mult from real ers_region medians; tech fit + labor from profiling) ----------
 const REGIONS = {
@@ -516,6 +531,28 @@ const HANDS_PER_COW = 1 / 350;
 // that capacity; short-handed ranches still own the bull but realize less of his true
 // genetics into the herd (Penrose 1959: growth is capped by managerial capacity, and
 // new capacity takes a year to become useful, hence the hire lag below).
+// Overhead, reworked 2026-09-11. It used to be a flat $35,000 whatever the herd, which is
+// $16/cow on the 2,300-head outfits naive_roi and cost_leader buy and $86/cow on the
+// 400-head outfit elite_genetics buys: the model was subsidising scale, and the harsh
+// cowCost was the only thing holding volume back. USDA ERS 2018 puts opportunity cost plus
+// overhead (land, capital recovery, general farm overhead) at $1,129/cow for a 20-49 cow
+// outfit and $108/cow at 500+ head, which is the class every ranch here belongs to. The
+// floor keeps the "small outfits pay it too" lumpiness; it binds below 324 head, which in
+// practice is only a ranch that has destocked hard.
+const OVERHEAD_FLOOR = 35000;  // the fixed bill an outfit pays whatever it runs
+const OVERHEAD_PER_COW = 108;  // USDA ERS 2018 opportunity + overhead, 500+ cow class
+// Drought feed is priced by the hay market, not by how cheaply you run in a normal year,
+// so the drought bump in cowCost is added off this reference instead of multiplying your
+// own base. Held at the pre-2026-09-11 maintenance base so the cost cut did not silently
+// soften the drought, which is the shock the defensive archetypes exist to survive.
+const FEED_SHOCK_REF = 880;
+// Cost of production follows the cattle cycle. Bull prices, bred-female prices, cull-cow
+// prices and the calf price itself all scale with w.feederIdx in this model; the cost of
+// KEEPING a cow was the one input that did not, so a boom was pure upside and the outfit
+// with the most cows simply won it. In the real cycle a high-price year drags hay, pasture
+// rent, replacement females and fuel up with it. 0.45 is the elasticity: a 40% price boom
+// adds about 16% to cow cost, a soft market takes about 10% off.
+const COST_CYCLE_ELAST = 0.45;
 const HAND_WAGE = 29000;      // one hired hand's annual payroll, base
 const HANDS_PER_BULL = 0.75;  // management capacity an active bull requires
 const UTIL_K = 1.5;           // utilization exponent: how sharply understaffing bites
@@ -647,7 +684,15 @@ const ARCHETYPES = {
     // weight). The old warning above still stands and is why the weight is 0.20 and not
     // more: growth is cheap for a cash-rich buyer of a small ranch, so it earns a share
     // of the vector, not the vector.
-    kpi: { resilience: 0.35, lowDebt: 0.20, costEff: 0.15, herdGrowth: 0.15, genetics: 0.15 },
+    // ATTEMPT 3 (11/05, season precondition). herdGrowth .15 was not enough: a seeded
+    // default-board seat still won 16-17% (hold-everything 13-15%) against 18-20% active,
+    // so a team could coast and win one game in six. lowDebt measured 1.00 in BOTH states
+    // (debtCap 0.10, the AI never borrows), so 0.10 of it was free points that did not
+    // separate acting from sitting. Moved to herdGrowth: active score unchanged (0.97 vs
+    // 1.00 on the swapped term), passive loses 0.084. Measured over three seeds: active
+    // 17.7-19.3% (was 18.5-19.9%), default-board 6.1-7.0% (was 16.2-17.1%), hold 3.3-5.0%
+    // (was 13.0-15.2%). lowDebt stays at .10 so borrowing is still a scored decision.
+    kpi: { resilience: 0.35, lowDebt: 0.10, costEff: 0.15, herdGrowth: 0.25, genetics: 0.15 },
     traitVal: { ce: 1.3, growth: 0.8, marb: 0.4, forage: 1.5, milk: 1.1 },
     shade: 0.72, bidCashCap: 0.10, expandRate: 0.08, debtCap: 0.10, leanOps: 0.90, handsMult: 1.5, // family labor, no hired crew
     marketing: 'volume', techRule: (fit, t) => (t === 'water' && fit >= 1.0) || (t === 'dogs' && fit >= 1.2),
@@ -763,14 +808,20 @@ function startingBulls(g, rosterCap) {
   }
   return bulls;
 }
-function makeRanch(key, l) {
+// startCashScale (season hook, 11/05, integration/bull-market.md section b): optional
+// multiplier on the investor stake, clamped to 0.85-1.15 so a rich team gets about one
+// tier of ranch, not the trophy outfit plus a war chest. Omitted = START_CASH exactly,
+// so the default game and the AI path are untouched. makeListings() stays on the constant.
+function makeRanch(key, l, startCashScale) {
   const a = ARCHETYPES[key];
+  const startCash = startCashScale === undefined || startCashScale === null
+    ? START_CASH : Math.round(START_CASH * clamp(startCashScale, 0.85, 1.15));
   const g = {}; TRAITS.forEach(t => g[t] = clamp(4.5 + gauss() * 0.8, 3, 7));
   // a ranch only needs so many herd sires; deep pockets no longer mean infinite bulls
   const rosterCap = clamp(Math.round(l.herd / 250), 2, 8);
   return {
     key, a, county: l.county, region: l.region, herd: l.herd, herd0: l.herd,
-    cash: START_CASH - l.ask, ranchAsk: l.ask,
+    cash: startCash - l.ask, ranchAsk: l.ask,
     debt: 0, g, rep: 25 + Math.round(Math.random() * 15),
     tech: new Set(), bulls: startingBulls(g, rosterCap), semen: null, tallowContract: false,
     landCap: l.landCap, rosterCap,
@@ -801,6 +852,30 @@ function equity(r, w) {
   const gAvg = avg(TRAITS.map(t => r.g[t]));
   // better-genetics herds appraise higher (0.7 + g/10*0.6: g5 = 1.0x, g7 = 1.12x)
   return r.cash - r.debt + r.herd * 1400 * Math.pow(w.feederIdx, 0.8) * (0.7 + gAvg / 10 * 0.6);
+}
+
+// What an outfit can actually put behind a bid (2026-09-11). The bid cap used to be raw
+// cash, which meant a ranch $6,000 overdrawn with $3,000,000 of equity could not bid one
+// dollar. That contradicts the game's OWN bust rule, which forecloses on EQUITY and says in
+// as many words that the bank carries an overdraft against collateral; and it contradicts
+// the business, where cow-calf operations buy bulls on an operating line every spring.
+// It also broke the sale: in game AHGEX both high-roster bidders finished slightly cash
+// negative, bought ZERO bulls across five years, and years 3-5 sold nothing at all, because
+// the only outfits with roster room were the two locked out by an overdraft.
+// CREDIT_LINE is deliberately small. It is a line of credit against collateral, not a war
+// chest: 5% of equity net of existing debt, so a $3M outfit can reach about $150,000, enough
+// to stay in the ring for a bull or two and nowhere near enough to buy the sale.
+// NOTE, and this was a real bug on the first pass: equity() is ALREADY net of debt
+// (cash - debt + herd value), so subtracting r.debt again here double-counted the
+// borrowing and drove the line to zero for precisely the leveraged big-herd outfits the
+// line exists to keep in the ring. Do not reintroduce it.
+const CREDIT_LINE = 0.05;
+// Floor on the valuation horizon for a bull, in years. See bullEstValue: without it the
+// final year's sale prices every lot on one breeding season and nothing clears its reserve.
+const BULL_MIN_HORIZON = 3;
+function bidCapacity(r, w) {
+  const line = Math.max(0, equity(r, w) * CREDIT_LINE);
+  return Math.max(0, r.cash + line);
 }
 
 // ---------- bulls ----------
@@ -874,7 +949,19 @@ function bullCoverage(r) {
 // willingness to pay: PV of increments vs a $4,000 commodity bull, on CATALOG traits
 function bullEstValue(r, w, bull, yearsLeft) {
   const cov = bullCoverage(r);
-  const yrs = Math.min(4, Math.max(1, yearsLeft));
+  // THE GAME CLOCK IS NOT THE END OF THE RANCH (2026-09-11). This used to truncate the
+  // valuation at yearsLeft, so in the final year a bull was priced on ONE breeding season
+  // and no rational bidder could clear a reserve set for a four-year asset. The final sale
+  // went dead: three solo games played end to end (WUABY, JVXSX, AQGGE) sold ZERO of five
+  // year-5 lots each, with every AI cash-rich and holding roster room, and that alone was
+  // the whole remaining no-sale rate.
+  // The truncation was also wrong on the game's own terms. A bull's genetic lift lands in
+  // the herd the year he breeds and is still there at the final whistle, where the genetics
+  // KPI scores it; and the rancher does not stop ranching because a five-year teaching
+  // window closed. BULL_MIN_HORIZON keeps a floor under the valuation so the last sale is a
+  // real sale. It is a floor, not a bonus: a bull bought early is still worth more, because
+  // he is worth his full four years.
+  const yrs = Math.min(4, Math.max(BULL_MIN_HORIZON, yearsLeft));
   let pv = 0, pvC = 0;
   const commodity = { ce: 5, growth: 5, marb: 5, forage: 5, milk: 5 };
   for (let y = 0; y < yrs; y++) {
@@ -899,7 +986,15 @@ function calfCwt(r, w) {
   return p;
 }
 function cowCost(r, w) {
-  let c = 880;
+  // 700 as of 2026-09-11, down from 880. Every ranch in this game runs 380-2,350 head, so
+  // the whole field sits in USDA ERS's 500+ cow class, where 2024 operating cost is
+  // $691/cow on $1,130 revenue and 2018 TOTAL cost is $910/cow INCLUDING land and capital
+  // recovery. At 880 our realised cow cost was $977 and every outfit lost money on a
+  // full-cost basis in most years, which is the opposite shape to real cow-calf: positive
+  // over operating costs most years, negative over full costs mainly on SMALL operations,
+  // and this game has none. Chosen by sweep, not picked (_costside_sweep_20260911.js);
+  // it moves WITH the scaled overhead below, which is the other half of the same fix.
+  let c = 700;
   const sev = droughtSeverity(w, r.region);
   let feedBump = sev * 0.55;
   let mit = 0;
@@ -907,7 +1002,14 @@ function cowCost(r, w) {
   if (r.tech.has('vfence')) mit += TECHS.vfence.droughtMitigation * (REGIONS[r.region].tech.vfence / 1.8);
   mit += Math.max(0, r.g.forage - 5) * 0.03;
   feedBump *= (1 - clamp(mit, 0, 0.7));
-  c *= (1 + feedBump * 0.6);
+  // ADDITIVE off a fixed reference, not multiplicative off your own base (2026-09-11).
+  // Drought feed is bought at a market price: the hay costs what hay costs, and a well-run
+  // outfit does not get a discount on it for being well-run. Multiplying the base meant
+  // cutting maintenance cost from 880 to 700 quietly cut the drought bill by 20% as a side
+  // effect, which weakened the one shock the defensive archetypes are built to survive.
+  // FEED_SHOCK_REF holds that bill at the dollars it was before the cut.
+  c += FEED_SHOCK_REF * feedBump * 0.6;
+  c *= Math.pow(w.feederIdx, COST_CYCLE_ELAST); // costs ride the cycle, see COST_CYCLE_ELAST
   if (w.shock === 'cheap_feed') c *= 0.88;
   // structure culling: sound feet, legs and udders mean fewer replacements and less vet
   c *= (1 - Math.min(cullYears(r, 'structure'), CULL_FOCUS.structure.cap) * CULL_FOCUS.structure.cowCost
@@ -1011,12 +1113,15 @@ function productionYear(r, w) {
   r.tallowNet = tal.net; r.tallowCulls = Math.round(tal.culls);
   if (r.tallowContract) r.tallowLastYear = w.year; // stamp continuity for next year's renewal check
   const cowCostTot = cowCost(r, w) * r.herd, laborTot = laborCost(r, w);
-  const overhead = 35000, interest = r.debt * (w.rateHikeYears > 0 ? 0.13 : 0.07);
+  const overhead = Math.max(OVERHEAD_FLOOR, r.herd * OVERHEAD_PER_COW);
+  const interest = r.debt * (w.rateHikeYears > 0 ? 0.13 : 0.07);
   // O-gate payroll: the management crew's annual wage, independent of the herd-scaled
   // operating labor above. Charged on hands actually on the payroll THIS year, whether
   // or not they are fully utilized (idle capacity still draws a paycheck).
   const payroll = r.hands * hireCost(r, w);
-  // fixed overhead (equipment, insurance, facilities) is lumpy: small outfits pay it too
+  // overhead (equipment, insurance, facilities, and the land and capital the cows stand on)
+  // is lumpy at the bottom and scales above it: small outfits pay the floor whatever they
+  // run, big ones pay for what they use
   const costs = (cowCostTot + laborTot) * lean + overhead + extraCost + commodityBullCost + interest + payroll;
   r.totalCost += costs; r.totalLbs += calves * lbs;
   const net = revenue + semenRoyalty + tal.net + cullCash - costs;
@@ -1227,7 +1332,10 @@ function decideYear(r, w) {
 // ---------- sealed-bid auction ----------
 function auctionYear(ranches, w, ledger) {
   const yearsLeft = YEARS - w.year + 1;
-  for (let i = 0; i < bullsForYear(w.year); i++) {
+  // size the book to who can actually bid: passive never bids (bidCashCap 0), and a ranch
+  // that has already busted is not in the room
+  const nBidders = ranches.filter(r => r.a.bidCashCap > 0 && !(r.cash < 0 && r.herd < 150)).length;
+  for (let i = 0; i < bullsForYear(w.year, nBidders); i++) {
     const bull = makeBull(w);
     let best = null, bestBid = 0, bestTrue = null, bestTrueVal = -1, bestTrueOpen = false;
     for (const r of ranches) {
@@ -1247,13 +1355,13 @@ function auctionYear(ranches, w, ledger) {
       if (!open) continue; // roster full: sits this one out
       // estimation noise by buyer sophistication (real ladder: soph buyers price better)
       const est = bullEstValue(r, w, bull, yearsLeft) * Math.exp(gauss() * (r.a.estNoise || 0.16));
-      const bid = Math.min(est * r.a.shade, r.cash * r.a.bidCashCap);
+      const bid = Math.min(est * r.a.shade, bidCapacity(r, w) * r.a.bidCashCap);
       if (bid > bestBid && bid >= bull.reserve) { bestBid = bid; best = r; }
     }
     if (!best) continue; // no sale
     // could the true-best buyer have taken this bull? Losing on budget scarcity or a
     // full roster is a rational allocation, not noise-driven misallocation
-    const affordable = bestTrueOpen && bestTrue.cash * bestTrue.a.bidCashCap >= bestBid;
+    const affordable = bestTrueOpen && bidCapacity(bestTrue, w) * bestTrue.a.bidCashCap >= bestBid;
     best.cash -= bestBid; bookCash(best, 'bulls', -bestBid);
     // ledger bookkeeping: a bull covers a fixed head count (covHead) no matter how the
     // herd grows later, and a premium marketer's pedigree asset is real brand value
@@ -1307,6 +1415,29 @@ function scoreGame(ranches, w) {
     // DIAG stripped
     return s;
   });
+}
+// Season hook (11/05, integration/bull-market.md section c). Pure: ranks the HUMAN teams
+// of one finished game by scoreGame and returns each one's percentile. `results` is an
+// array of { ranch, is_ai, ... } rows; every row goes into scoreGame so the field medians
+// (costEff, resilience) include the bots, then only rows with !is_ai are ranked. Ties take
+// the midrank (average rank), pct = (N - avgRank + 0.5) / N, so first of 8 = 0.94 and
+// last = 0.06. Busted teams keep their engine score (the 0.3 multiplier is the penalty).
+// Nothing in the default game calls this.
+function teamPercentiles(results, w) {
+  const scores = scoreGame(results.map(r => r.ranch), w);
+  const humans = [];
+  results.forEach((row, i) => { if (!row.is_ai) humans.push({ index: i, score: scores[i] }); });
+  const N = humans.length;
+  const sorted = humans.slice().sort((a, b) => b.score - a.score);
+  let i = 0;
+  while (i < sorted.length) {
+    let j = i;
+    while (j + 1 < sorted.length && sorted[j + 1].score === sorted[i].score) j++;
+    const avgRank = (i + 1 + j + 1) / 2;
+    for (let k = i; k <= j; k++) { sorted[k].rank = avgRank; sorted[k].pct = (N - avgRank + 0.5) / N; }
+    i = j + 1;
+  }
+  return humans;
 }
 
 // ---------- one game ----------
@@ -1428,6 +1559,7 @@ if (typeof window !== 'undefined') {
     makeRanch,
     makeBull,
     bullEstValue,
+    bidCapacity,
     bullCoverage,
     bullYearValue,
     newWorld,
@@ -1437,6 +1569,7 @@ if (typeof window !== 'undefined') {
     auctionYear,
     productionYear,
     scoreGame,
+    teamPercentiles,
     computeKpis,
     equity,
     clamp,
@@ -1506,6 +1639,7 @@ if (typeof window !== 'undefined') {
     makeRanch,
     makeBull,
     bullEstValue,
+    bidCapacity,
     bullCoverage,
     bullYearValue,
     newWorld,
@@ -1515,6 +1649,7 @@ if (typeof window !== 'undefined') {
     auctionYear,
     productionYear,
     scoreGame,
+    teamPercentiles,
     computeKpis,
     equity,
     clamp,

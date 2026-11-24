@@ -1,54 +1,38 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Bull Market</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="house.css">
 <style>
-  :root {
-    --bg: #1b1510; --surface: #261e16; --surface2: #2f2519; --border: #453626;
-    --text: #efe6d8; --muted: #b09a7f; --tan: #d19a5c; --tan-dk: #b3803f;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    display: flex; align-items: center; justify-content: center; padding: 1.5rem;
-  }
-  .wrap { width: 100%; max-width: 620px; }
-  .brand { font-size: 0.78rem; letter-spacing: 0.18em; text-transform: uppercase; color: var(--tan); margin-bottom: 0.5rem; }
-  h1 { font-family: Georgia, "Times New Roman", serif; font-weight: 600; font-size: 2.3rem; line-height: 1.1; margin: 0 0 0.55rem; }
-  .lede { color: var(--muted); font-size: 1rem; line-height: 1.5; margin: 0 0 1.8rem; max-width: 46ch; }
-  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 0.9rem; }
-  .card {
-    display: block; text-decoration: none; color: inherit; background: var(--surface);
-    border: 1px solid var(--border); border-radius: 10px; padding: 1.15rem 1.2rem; transition: border-color 0.15s, transform 0.1s;
-  }
-  .card:hover { border-color: var(--tan); transform: translateY(-2px); }
-  .card.primary { background: var(--surface2); border-color: var(--tan-dk); }
-  .card .go { font-family: Georgia, serif; font-size: 1.25rem; font-weight: 600; margin-bottom: 0.3rem; }
-  .card.primary .go { color: var(--tan); }
-  .card .sub { color: var(--muted); font-size: 0.86rem; line-height: 1.45; }
-  .note { margin-top: 1.6rem; color: var(--muted); font-size: 0.82rem; line-height: 1.5; border-top: 1px solid var(--border); padding-top: 1rem; }
-  .note b { color: var(--text); font-weight: 600; }
-  @media (max-width: 520px) { .cards { grid-template-columns: 1fr; } h1 { font-size: 1.9rem; } }
+  :root { --world: #6f8352; }
+  .doors { display: grid; gap: var(--s3); }
+  .doors .card { display: block; text-decoration: none; }
+  .doors .card b { display: block; font: 600 var(--t2)/1.1 var(--font-head); margin-bottom: var(--s1); }
+  .doors .card small { color: var(--mute); }
 </style>
 </head>
 <body>
-  <div class="wrap">
-    <h1>The Bull Market</h1>
-    <p class="lede">A multiplayer strategy game on real cattle data. Buy a ranch, read your secret objective, and outbid your rivals at the bull auction across five compressed years.</p>
-    <div class="cards">
-      <a class="card primary" href="team.html">
-        <div class="go">Join a Game &rarr;</div>
-        <div class="sub">You are a player. Enter the join code your host read out in the room.</div>
-      </a>
-      <a class="card" href="admin.html">
-        <div class="go">Host a Game &rarr;</div>
-        <div class="sub">You are running it. Create a game, share the code, and advance the years.</div>
-      </a>
+<div class="screen narrow">
+  <header class="top">
+    <a class="mark" href="index.html"><i>B</i><b>Bull Market</b></a>
+    <div class="round">Week <b>3</b></div>
+    <div class="wallet"><span class="k">Wallet</span><span class="v">$1,000</span><span class="d"></span></div>
+  </header>
+  <main class="play stack">
+    <h1 class="title-art">Bull<br>Market<small>MBA 546 &middot; five years &middot; one phone per table</small></h1>
+    <p>Buy a ranch, read your objective, and outbid the room at the bull sale across five years of real cattle data.</p>
+    <div class="doors">
+      <a class="card pick" href="team.html"><b>Join a game</b><small>Enter the five-letter code your host reads out.</small></a>
+      <a class="card pick" href="admin.html"><b>Host a game</b><small>Create a game, share the code, advance the years.</small></a>
     </div>
-    <p class="note">Playing with a friend? One person <b>hosts</b> and reads out the 5-letter join code. Everyone else <b>joins</b> on their own phone or laptop with that code. Same link for both.</p>
-  </div>
+  </main>
+  <div class="status"><div class="stat"><span class="v">5</span><span class="k">years</span></div><div class="stat"><span class="v">6</span><span class="k">objectives</span></div><div class="stat"><span class="v">1</span><span class="k">phone per table</span></div></div>
+  <div class="actions"><a class="btn act" href="team.html">Join with a code</a></div>
+</div>
 </body>
 </html>

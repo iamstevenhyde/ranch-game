@@ -4,147 +4,145 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>The Bull Market | Instructor Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="house.css">
+<script src="house.js"></script>
 <style>
-  :root {
-    --tan:    #c8a96e;
-    --rust:   #9b3a1a;
-    --dusk:   #2a2018;
-    --sand:   #f5ede0;
-    --sage:   #6b7c5c;
-    --sky:    #4a7fa5;
-    --fg:     #1a1410;
-    --muted:  #6b5e4a;
-    --border: #d4b896;
+  /* Bull Market: the one world color (sage). The host page follows the device theme. */
+  :root { --world: #6f8352; }
+  /* legacy names the JS templates still write, mapped onto the house tokens */
+  :root { --tan: var(--ink); --dusk: var(--card2); --sand: var(--bg); --sage: var(--mute); --sky: var(--ink);
+    --fg: var(--ink); --muted: var(--mute); --border: var(--line); --accent: var(--ink); --mono: var(--font-mono); }
+  .round #phaseChip { text-transform: uppercase; }
+  /* slice 1: projector lineup, every bull of the year on one screen, photo first (read-only) */
+  #lineupView { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 50; background: var(--bg); display: none; grid-template-rows: auto 1fr; overflow: auto; }
+  #lineupView.on { display: grid; }
+  #lineupView .lu-top { display: flex; align-items: center; gap: var(--s4); padding: var(--s3) var(--gutter); border-bottom: 1px solid var(--line); }
+  #lineupView .lu-top b { font-family: var(--font-head); font-size: var(--t2); }
+  #lineupView .lu-top .lu-sub { font: 400 var(--t0)/1 var(--font-mono); color: var(--mute); text-transform: uppercase; letter-spacing: .08em; }
+  #lineupView .lu-top button { margin-left: auto; }
+  .lu-grid { display: grid; grid-template-columns: repeat(3, 1fr); grid-auto-rows: 1fr; gap: var(--s3); padding: var(--s3) var(--gutter); min-height: 0; }
+  .lu-lot { background: var(--card); border: 1px solid var(--line); border-radius: var(--r2); padding: var(--s2); display: grid; grid-template-rows: 1fr auto; gap: var(--s2); min-height: 0; }
+  .lu-lot img { width: 100%; height: 100%; min-height: 0; object-fit: cover; border-radius: var(--r1); background: var(--card2); }
+  .lu-lot .lu-no { font: 600 var(--t-1)/1 var(--font-mono); color: var(--mute); letter-spacing: .08em; text-transform: uppercase; }
+  .lu-lot h3 { margin: 0; font-size: var(--t2); line-height: 1.1; }
+  .lu-lot .lu-sire { font-size: var(--t-1); color: var(--mute); }
+  .lu-lot .lu-num { display: flex; justify-content: space-between; align-items: baseline; font-family: var(--font-mono); color: var(--mute); font-size: var(--t0); }
+  .lu-lot .lu-num b { color: var(--ink); font-size: var(--t2); }
+  main.play { width: 100%; max-width: 64rem; margin: 0 auto; }
+  section { margin-bottom: var(--s5); }
+  section > h2 { font: 400 var(--t-1)/1.3 var(--font-mono); letter-spacing: .08em; text-transform: uppercase; color: var(--mute); margin: 0 0 var(--s2); display: flex; align-items: center; gap: var(--s3); flex-wrap: wrap; }
+  section > h2 span { text-transform: none; letter-spacing: 0; }
+  .row { display: flex; gap: var(--s3); align-items: center; flex-wrap: wrap; margin-bottom: var(--s3); }
+  .row:last-child { margin-bottom: 0; }
+  main button:not(.btn) {
+    font: 600 var(--t0)/1.2 var(--font-body); min-height: var(--touch); padding: var(--s2) var(--s4);
+    border: 1px solid var(--line2); border-radius: var(--r1); background: var(--card); color: var(--ink);
+    cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: var(--s2);
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: Georgia, serif; background: var(--sand); color: var(--fg); min-height: 100vh; }
-  header { background: var(--dusk); color: var(--tan); padding: 1rem 2rem; display: flex; align-items: center; gap: 1rem; }
-  header h1 { font-size: 1.3rem; letter-spacing: 0.04em; }
-  header .badge { font-size: 0.75rem; background: var(--rust); color: #fff; padding: 0.2rem 0.5rem; border-radius: 3px; font-family: monospace; }
-  main { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
-  section { margin-bottom: 2rem; }
-  h2 { font-size: 1rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--rust); border-bottom: 1px solid var(--border); padding-bottom: 0.4rem; margin-bottom: 1rem; }
-  .card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1.2rem 1.5rem; }
-  .row { display: flex; gap: 1rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.8rem; }
-  button { background: var(--rust); color: #fff; border: none; padding: 0.5rem 1.1rem; border-radius: 4px; font-family: inherit; font-size: 0.9rem; cursor: pointer; }
-  button:hover { background: #7a2d12; }
-  button:disabled { background: #bbb; cursor: default; }
-  button.secondary { background: var(--sage); }
-  button.secondary:hover { background: #55624a; }
-  .code { font-family: monospace; font-size: 1.5rem; letter-spacing: 0.2em; color: var(--rust); font-weight: bold; }
-  .status { font-size: 0.8rem; color: var(--muted); font-style: italic; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
-  th { background: var(--dusk); color: var(--tan); text-align: left; padding: 0.4rem 0.6rem; }
-  td { padding: 0.4rem 0.6rem; border-bottom: 1px solid var(--border); }
-  tr:last-child td { border-bottom: none; }
-  .tag { display: inline-block; padding: 0.15rem 0.4rem; border-radius: 3px; font-size: 0.75rem; font-family: monospace; }
-  .tag-ai { background: #e8f0fe; color: #1a56db; }
-  .tag-human { background: #def7ec; color: #1a7a4a; }
-  .tag-elite { background: #fef3c7; color: #92400e; }
-  .tag-premium { background: #ede9fe; color: #5b21b6; }
-  .tag-mid { background: #e0f2fe; color: #075985; }
-  .tag-commercial { background: #f1f5f9; color: #475569; }
-  .tag-ready { background: #def7ec; color: #1a7a4a; }
-  .tag-waiting { background: #fef3c7; color: #92400e; }
-  .ready-summary { display: inline-block; font-size: 0.9rem; font-weight: bold; padding: 0.3rem 0.8rem; border-radius: 4px; margin-bottom: 0.8rem; background: #f1f5f9; color: var(--muted); }
-  .ready-summary.all-ready { background: #def7ec; color: #1a7a4a; }
-  #msg { padding: 0.5rem 1rem; border-radius: 4px; margin-top: 0.5rem; font-size: 0.85rem; display: none; }
-  #msg.ok { background: #def7ec; color: #1a7a4a; display: block; }
-  #msg.err { background: #fde8e8; color: #c81e1e; display: block; }
-  .phase-chip { display: inline-block; padding: 0.2rem 0.7rem; border-radius: 12px; font-size: 0.8rem; background: var(--dusk); color: var(--tan); font-family: monospace; }
-  .lb-bar { display: inline-block; height: 8px; background: var(--rust); border-radius: 4px; min-width: 2px; }
-  .metric-btn { font-size: 0.75rem; padding: 0.25rem 0.6rem; }
-  .metric-btn.active { background: var(--sky); }
-  .tag-autolock { background: #fde8e8; color: #c81e1e; }
-  .clock-box { display: flex; align-items: center; gap: 1rem; margin-bottom: 0.8rem; }
-  .clock-display { font-family: monospace; font-size: 2.4rem; font-weight: bold; color: var(--dusk); letter-spacing: 0.05em; min-width: 4ch; }
-  .clock-display.clock-warn { color: var(--rust); }
-  .clock-display.clock-expired { color: #c81e1e; }
-  input[type=number].minutes-input { width: 5rem; padding: 0.35rem 0.5rem; font-family: inherit; font-size: 0.9rem; border: 1px solid var(--border); border-radius: 4px; }
-  /* ---- Debrief (projector, item 3, 9/10) ---- */
-  #secDebrief main, #secDebrief { max-width: none; }
-  .debrief-card { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: 1.4rem 1.6rem; margin-bottom: 1.6rem; }
-  .debrief-title { font-size: 1.15rem; font-weight: bold; color: var(--rust); margin-bottom: 0.3rem; }
-  .debrief-note { font-size: 0.9rem; color: var(--muted); margin-bottom: 1rem; line-height: 1.4; }
-  table.debrief-table { width: 100%; border-collapse: collapse; font-size: 1.05rem; }
-  table.debrief-table th { background: var(--dusk); color: var(--tan); text-align: right; padding: 0.5rem 0.8rem; font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; }
+  main button:not(.btn):hover { border-color: var(--ink); }
+  main button:disabled { opacity: .45; cursor: not-allowed; }
+  main button.secondary { border-color: transparent; background: transparent; color: var(--mute); }
+  main button.metric-btn { min-height: 2rem; padding: 0 var(--s3); font: 600 var(--t-1)/1.2 var(--font-body); }
+  main button.metric-btn.active { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+  .code { font-family: var(--font-mono); font-size: var(--t4); letter-spacing: .25em; font-weight: 600; }
+  .status { font-size: var(--t-1); color: var(--mute); }
+  label { display: inline-block; margin: 0; }
+  select, input[type=number] { width: auto; }
+  input[type=number].minutes-input { width: 6rem; font-family: var(--font-mono); }
+  table { font-size: var(--t0); }
+  .table-wrap { overflow-x: auto; }
+  .tag { display: inline-block; font: 600 .6875rem/1.6 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: 0 var(--s2); border: 1px solid var(--line2); border-radius: 999px; color: var(--mute); white-space: nowrap; }
+  .tag-ready, .tag-elite { color: var(--ink); border-color: var(--ink); }
+  .tag-autolock { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  .ready-summary { display: inline-block; font: 600 var(--t-1)/1.6 var(--font-mono); letter-spacing: .06em; text-transform: uppercase; padding: var(--s1) var(--s3); border: 1px solid var(--line2); border-radius: 999px; color: var(--mute); margin-bottom: var(--s3); }
+  .ready-summary.all-ready { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+  #msg { position: fixed; left: 50%; bottom: var(--s5); transform: translateX(-50%); z-index: 1000; max-width: min(92vw, 28rem);
+    padding: var(--s3) var(--s4); border-radius: var(--r1); font-weight: 600; display: none; background: var(--ink); color: var(--bg); box-shadow: var(--shadow); }
+  #msg.ok, #msg.err { display: block; }
+  .lb-bar { display: inline-block; height: .375rem; background: var(--ink); border-radius: 999px; min-width: 2px; }
+  .clock-box { display: flex; align-items: center; gap: var(--s5); margin-bottom: var(--s3); flex-wrap: wrap; }
+  .clock-display { font-family: var(--font-mono); font-size: var(--t5); font-weight: 600; letter-spacing: .02em; min-width: 4ch; line-height: 1; }
+  .clock-display.clock-warn { animation: pulse 1s steps(2, end) infinite; }
+  .clock-display.clock-expired { color: var(--mute); }
+  .debrief-card { background: var(--card); border: 1px solid var(--line); border-radius: var(--r2); padding: var(--s4) var(--s5); margin-bottom: var(--s4); }
+  .debrief-title { font-family: var(--font-head); font-size: var(--t2); font-weight: 600; margin-bottom: var(--s1); }
+  .debrief-note { font-size: var(--t-1); color: var(--mute); margin-bottom: var(--s3); line-height: 1.4; max-width: 72ch; }
+  #debriefOTable, #debriefBidTable, #debriefEquityTable, #debriefBridgeTable, #debriefCfTable, #adminRecap { overflow-x: auto; }
+  table.debrief-table th { white-space: normal; }
+  table.debrief-table th, table.debrief-table td { text-align: right; }
   table.debrief-table th:first-child, table.debrief-table td:first-child { text-align: left; }
-  table.debrief-table td { padding: 0.55rem 0.8rem; border-bottom: 1px solid var(--border); text-align: right; font-family: monospace; font-size: 1.05rem; }
-  table.debrief-table tr.debrief-rank1 td { background: #fef3c7; font-weight: bold; }
-  table.debrief-table tr.debrief-busted td { color: var(--muted); font-style: italic; }
-  .ratio-flag { color: #fff; background: var(--rust); border-radius: 3px; padding: 0.1rem 0.5rem; font-weight: bold; }
-  .ratio-ok { color: var(--sage); font-weight: bold; }
-  .bridge-resid { color: var(--rust); font-weight: bold; }
-  .bridge-resid.zero { color: var(--sage); font-weight: normal; }
-  .rank-split { color: var(--rust); font-weight: bold; }
-  .bridge-resid.big { color: #fff; background: var(--rust); padding: 0.15rem 0.4rem; border-radius: 3px; }
-  .cf-worse { color: var(--rust); font-weight: bold; }
-  .cf-better { color: var(--sage); font-weight: bold; }
-  .debrief-team-name { font-size: 1.1rem; font-weight: bold; }
+  table.debrief-table td { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  table.debrief-table tr.debrief-rank1 td { font-weight: 700; }
+  table.debrief-table tr.debrief-busted td { color: var(--mute); font-style: italic; }
+  .ratio-flag, .rank-split, .bridge-resid { font-weight: 700; }
+  .ratio-ok, .bridge-resid.zero { color: var(--mute); font-weight: 400; }
+  .bridge-resid.big { text-decoration: underline; text-decoration-color: var(--line2); }
+  .cf-worse { color: var(--down); font-weight: 600; }
+  .cf-better { color: var(--up); font-weight: 600; }
+  .debrief-team-name { font-family: var(--font-body); font-weight: 700; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: var(--s1) var(--s4); align-items: baseline; }
 </style>
 </head>
 <body>
-<header>
-  <h1>The Bull Market</h1>
-  <span class="badge">Instructor Console</span>
-  <span id="phaseChip" class="phase-chip" style="margin-left:auto">lobby</span>
+<div class="screen">
+<header class="top">
+  <a class="mark" href="index.html"><i>B</i><b>Bull Market</b></a>
+  <div class="round"><span>Host</span> &middot; <b id="phaseChip">lobby</b></div>
+  <!-- WALLET: season placeholder, display only; season.js seeds it. -->
+  <div class="wallet"><span class="k">Wallet</span><span class="v">$1,000</span><span class="d"></span></div>
 </header>
-<main>
+<main class="play">
   <div id="msg"></div>
 
   <!-- Create Game -->
   <section id="secCreate">
-    <h2>Create Game</h2>
+    <h2>Create game</h2>
     <div class="card">
       <div class="row">
-        <label style="font-size:0.85rem;margin-right:0.6rem">Years
-          <select id="gameYears" style="margin-left:0.3rem">
-            <option value="3">3</option><option value="4">4</option><option value="5" selected>5</option>
-          </select></label>
-        <button id="btnCreate" onclick="createGame()">Create New Game</button>
-        <span class="status">Generates a 5-letter join code for students.</span>
-      </div>
-      <div class="row" style="margin-top:0.6rem">
-        <button id="btnResume" onclick="resumeGame()">Resume Last Game</button>
-        <span class="status">Reloads the most recent game so a page refresh does not lose it (useful when testing solo).</span>
+        <label for="gameYears">Years</label>
+        <select id="gameYears">
+          <option value="3">3</option><option value="4">4</option><option value="5" selected>5</option>
+        </select>
+        <button id="btnCreate" class="btn act" onclick="createGame()">Create new game</button>
+        <button id="btnResume" onclick="resumeGame()">Resume last game</button>
       </div>
       <div id="joinCodeBox" style="display:none">
-        Join code: <span class="code" id="joinCodeDisplay"></span>
-        <div class="status" style="margin-top:0.4rem">Share this code with students. They open team.html and enter it.</div>
+        <span class="k">Join code</span> <span class="code" id="joinCodeDisplay"></span>
+        <div class="status" style="margin-top:var(--s1)">Students open team.html and enter it.</div>
       </div>
     </div>
   </section>
 
   <!-- Lobby -->
   <section id="secLobby" style="display:none">
-    <h2>Lobby <span id="teamCountBadge" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <h2>Lobby <span id="teamCountBadge"></span></h2>
     <div class="card">
-      <table id="tblTeams">
+      <div class="table-wrap"><table id="tblTeams">
         <thead><tr><th>Team</th><th>Archetype</th><th>Type</th></tr></thead>
         <tbody id="tbodyTeams"></tbody>
-      </table>
-      <div class="row" style="margin-top:1rem">
-        <button id="btnStart" onclick="startGame()" disabled>Start Game</button>
-        <span class="status">Requires at least 1 human team. AI teams fill the remaining archetype slots.</span>
+      </table></div>
+      <div class="row" style="margin-top:var(--s4)">
+        <button id="btnStart" class="btn act" onclick="startGame()" disabled>Start game</button>
+        <span class="status">Needs one human team. AI fills the other archetypes.</span>
       </div>
     </div>
   </section>
 
   <!-- Market Monitor -->
   <section id="secMarket" style="display:none">
-    <h2>Ranch Market</h2>
+    <h2>Ranch market</h2>
     <div class="card">
-      <table id="tblRanches">
-        <thead><tr><th>County</th><th>Region</th><th>Herd</th><th>Ask</th><th>Bought By</th></tr></thead>
+      <div class="table-wrap"><table id="tblRanches">
+        <thead><tr><th>County</th><th>Region</th><th>Herd</th><th>Ask</th><th>Bought by</th></tr></thead>
         <tbody id="tbodyRanches"></tbody>
-      </table>
-      <div class="row" style="margin-top:1rem">
-        <button id="btnAssignRanches" onclick="assignRanches()" class="secondary">Assign Ranches (skip market)</button>
-        <span class="status">Round-robin assigns every joined team a ranch and opens Year 1 immediately. Manual market above stays the default.</span>
-      </div>
-      <div class="row" style="margin-top:0.4rem">
-        <button id="btnOpenAuction" onclick="openYear()" disabled>Open Year 1 (Board Meeting)</button>
-        <button id="btnForceOpenMarket" onclick="openYear()" class="secondary">Force open year</button>
+      </table></div>
+      <div class="row" style="margin-top:var(--s4)">
+        <button id="btnOpenAuction" class="btn act" onclick="openYear()" disabled>Open year 1</button>
+        <button id="btnForceOpenMarket" onclick="openYear()" class="secondary">Force open</button>
+        <button id="btnAssignRanches" onclick="assignRanches()" class="secondary">Assign ranches (skip market)</button>
         <span class="status" id="marketStatus">Waiting for all teams to buy a ranch.</span>
       </div>
     </div>
@@ -152,28 +150,24 @@
 
   <!-- Combined Year Monitor: operations status (teams set ops + bids on one page) -->
   <section id="secBoard" style="display:none">
-    <h2>Year in Progress <span id="boardYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <h2>Year in progress <span id="boardYear"></span></h2>
     <div class="card">
       <div id="adminRecap"></div>
-      <p style="font-size:0.85rem;color:var(--muted);margin-bottom:0.8rem">
-        Teams set operations (expand/destock, debt, technology, semen) and place sealed bids on
-        one page, then lock in. AI ranches have already decided. Resolve the year when teams are ready.
-      </p>
       <div class="clock-box">
-        <div>
-          <div class="status" style="margin-bottom:0.2rem">Minutes this year (defaults: year 1 = 12, then 8; edit to adjust)</div>
+        <div class="row" style="margin:0">
+          <label for="clockMinutes" class="status">Minutes</label>
           <input type="number" id="clockMinutes" class="minutes-input" min="0" step="0.5" placeholder="off">
-          <button id="btnStartClock" onclick="startClock()" style="margin-left:0.4rem">Start clock</button>
-          <button id="btnStopClock" onclick="stopClock()" class="secondary" style="margin-left:0.2rem;display:none">Stop clock</button>
+          <button id="btnStartClock" onclick="startClock()">Start clock</button>
+          <button id="btnStopClock" onclick="stopClock()" class="secondary" style="display:none">Stop clock</button>
         </div>
         <div id="clockDisplay" class="clock-display" style="display:none">--:--</div>
       </div>
       <div id="boardReadySummary" class="ready-summary">Teams ready: 0 / 0</div>
-      <table id="tblBoard">
+      <div class="table-wrap"><table id="tblBoard">
         <thead><tr><th>Team</th><th>Type</th><th>Locked in</th></tr></thead>
         <tbody id="tbodyBoard"></tbody>
-      </table>
-      <div class="row" style="margin-top:1rem">
+      </table></div>
+      <div class="row" style="margin-top:var(--s3)">
         <span class="status" id="boardStatus"></span>
       </div>
     </div>
@@ -181,16 +175,17 @@
 
   <!-- Sale Monitor (shown alongside the year monitor) -->
   <section id="secAuction" style="display:none">
-    <h2>Sealed-Bid Sale <span id="auctionYear" style="font-size:0.8rem;color:var(--muted);font-weight:normal"></span></h2>
+    <h2>Sealed-bid sale <span id="auctionYear"></span></h2>
     <div class="card">
-      <table id="tblBulls">
-        <thead><tr><th>Bull</th><th>Tier</th><th>Anchor</th><th>Range</th><th>Bids In</th><th>Winner</th><th>Price</th></tr></thead>
+      <div class="table-wrap"><table id="tblBulls">
+        <thead><tr><th>Bull</th><th>Tier</th><th>Anchor</th><th>Range</th><th>Bids in</th><th>Winner</th><th>Price</th></tr></thead>
         <tbody id="tbodyBulls"></tbody>
-      </table>
-      <div id="adminDeals" style="margin-top:1rem"></div>
-      <div class="row" style="margin-top:1rem">
-        <button id="btnResolve" onclick="resolveAuction()">Resolve &amp; Open Next Year</button>
-        <button id="btnNextYear" onclick="nextYear()" style="display:none" class="secondary">Advance to Next Year (manual fallback)</button>
+      </table></div>
+      <div id="adminDeals" style="margin-top:var(--s4)"></div>
+      <div class="row" style="margin-top:var(--s4)">
+        <button id="btnResolve" class="btn act lg" onclick="resolveAuction()">Resolve &amp; open next year</button>
+        <button id="btnNextYear" onclick="nextYear()" style="display:none" class="secondary">Advance to next year (manual fallback)</button>
+        <button type="button" onclick="showLineup(true)">Show lineup on projector</button>
         <span class="status" id="auctionStatus">Collecting operations and sealed bids.</span>
       </div>
     </div>
@@ -199,19 +194,16 @@
   <!-- Leaderboard -->
   <section id="secLeaderboard" style="display:none">
     <h2>Leaderboard
-      <button class="metric-btn active" id="btnMetCash" onclick="setMetric('cash')" style="margin-left:0.8rem">Cash</button>
+      <button class="metric-btn active" id="btnMetCash" onclick="setMetric('cash')">Cash</button>
       <button class="metric-btn" id="btnMetHerd" onclick="setMetric('herd')">Herd</button>
       <button class="metric-btn" id="btnMetRep" onclick="setMetric('rep')">Reputation</button>
     </h2>
     <div class="card">
-      <div class="debrief-note" style="margin-bottom:0.9rem">Two rankings, and they are not the same
-        race. <b>Scorecard</b> is each outfit measured against its own strategy's weights, which is what
-        the game actually scores. <b>Cash</b> is the bank balance. A team can lead one and trail the
-        other; where they disagree is the interesting part.</div>
-      <table id="tblLB">
-        <thead><tr><th>Scorecard</th><th>Cash</th><th>Team</th><th id="lbMetricHeader">Cash</th><th>Bar</th></tr></thead>
+      <div class="debrief-note">Two races. <b>Scorecard</b> is each outfit against its own strategy's weights, which is what the game scores. <b>Cash</b> is the bank balance. Where they disagree is the interesting part.</div>
+      <div class="table-wrap"><table id="tblLB">
+        <thead><tr><th>Scorecard</th><th>Cash</th><th>Team</th><th id="lbMetricHeader">Cash</th><th></th></tr></thead>
         <tbody id="tbodyLB"></tbody>
-      </table>
+      </table></div>
     </div>
   </section>
 
@@ -223,87 +215,71 @@
        default board, it placed 4th on the engine's scorecard, and the ranking that crowned
        it was ending cash. -->
   <section id="secDebrief" style="display:none">
-    <h2>End-of-Game Debrief</h2>
-    <div class="debrief-note" style="font-size:1rem;margin-bottom:1.2rem">Row order below comes from
-      <code>RanchEngine.scoreGame()</code>, the live engine's own KPI scorecard: each team's final state weighed
-      against <em>its own archetype's weights</em>, computed fresh from this game's data -- not raw dollars. A team
-      can protect the most equity and still score low, or lose equity and score first, because the scorecard rewards
-      the archetype's own objective, not survival of the balance sheet. <strong>Resolved 9/10:</strong> the 2026-09-08
-      class report's own "Rank" column, despite its text calling rank "the game's own scorecard... not the same thing
-      as raw dollars," is in fact a plain ending-cash sort -- verified exactly against the live game for all 8 teams.
-      Panel 3 below shows both orderings side by side (scorecard rank, cash rank in parentheses where they
-      differ) so that gap is visible on the projector, not just asserted: on 9/08, Railli's Rough Riders finished
-      LAST on cash but FIRST on its own archetype's scorecard (rapid_expansion weights herd growth 60%, and their
-      herd went 1,276 to 1,981), while The Mad Cows! finished first on cash but fourth on the scorecard.</div>
+    <h2>End-of-game debrief</h2>
+    <div class="debrief-note">Row order comes from <code>RanchEngine.scoreGame()</code>: each team's final state
+      weighed against <em>its own archetype's weights</em>, computed fresh from this game's data, not raw dollars.
+      Panel 3 shows the scorecard rank beside the cash rank so the gap is visible on the projector, not just asserted.
+      On 9/08, Railli's Rough Riders finished last on cash but first on its own scorecard (rapid_expansion weights
+      herd growth 60%, and their herd went 1,276 to 1,981), while The Mad Cows! finished first on cash but fourth on
+      the scorecard.</div>
 
     <div class="debrief-card">
-      <div class="debrief-title">1. Resources Owned vs Resources Exploited</div>
+      <div class="debrief-title">1. Resources owned vs resources exploited</div>
       <div class="debrief-note"><strong>Access is not advantage.</strong> Owning a herd sire is the V, R and I of
-        VRIO. Being staffed and organised to actually use him is the O, and it is where outfits fail. A short-handed
-        crew still owns the bull and still paid for him, but the herd only realises
-        <code>utilization<sup>1.5</sup></code> of his genetics, so at 50% staffed about a third of what you bought
-        lands. <em>Exploited</em> below is that utilisation year by year. <strong>Stockmanship</strong> is the one
-        asset here that cannot be bought, sold or traded: it builds only by staying on one cull focus and most of it
-        is lost the year you switch. <strong>Tech load</strong> is the standing management burden of the tools owned,
-        because a tool does not manage itself.</div>
+        VRIO. Being staffed and organised to use him is the O, and it is where outfits fail. A short-handed crew
+        still paid for the bull, but the herd only realises <code>utilization<sup>1.5</sup></code> of his genetics,
+        so at 50% staffed about a third of what you bought lands. <em>Exploited</em> is that utilisation year by year.
+        <strong>Stockmanship</strong> cannot be bought or traded: it builds by staying on one cull focus and most of
+        it is lost the year you switch. <strong>Tech load</strong> is the standing management burden of the tools owned.</div>
       <div id="debriefOTable"></div>
     </div>
 
     <div class="debrief-card">
-      <div class="debrief-title">2. Bid-to-Anchor: the same bull is worth different money to different ranches</div>
-      <div class="debrief-note">This panel is about VRIO's <strong>V</strong>. Anchor is the bull's modeled fair
-        value to the market; 1.0x is a fair-value bid. Ranches bid past it because the same animal is genuinely worth
-        different money to different outfits: an archetype's <code>traitVal</code> weights and its region's forage and
-        climate decide which traits pay, so a bull who is ordinary to one table is the missing piece for another.
-        Value is relative to the holder, not intrinsic to the asset.
-        <strong>Median, bids placed</strong> is across every bid a team submitted, won or lost;
-        <strong>average, bulls won</strong> only the lots it took home. A gap between them means a team won precisely
-        the lots it valued most highly, which is what winning an auction means.
-        <em>Not framed here as a winner's curse:</em> measured on the 9/08 catalog, catalog value and true value
-        correlate at r = 0.987, because the five traits are averaged and that cuts the per-trait noise by a factor of
-        the square root of five. There is almost no common-value uncertainty left to be cursed by. Teams bid these
-        multiples with near-perfect information, which is a different and more interesting problem.
-        Lot and bid counts are read off this game's own tables, not asserted.</div>
+      <div class="debrief-title">2. Bid-to-anchor: the same bull is worth different money to different ranches</div>
+      <div class="debrief-note">VRIO's <strong>V</strong>. Anchor is the bull's modeled fair value; 1.0x is a
+        fair-value bid. Ranches bid past it because an archetype's <code>traitVal</code> weights and its region's
+        forage and climate decide which traits pay. <strong>Median, bids placed</strong> covers every bid a team
+        submitted; <strong>average, bulls won</strong> only the lots it took home. A gap means the team won precisely
+        the lots it valued most. <em>Not a winner's curse:</em> on the 9/08 catalog, catalog and true value correlate
+        at r = 0.987, so teams bid these multiples with near-perfect information, which is a different and more
+        interesting problem.</div>
       <div id="debriefBidTable"></div>
     </div>
 
     <div class="debrief-card">
-      <div class="debrief-title">3. Scorecard vs Cash: two different races</div>
+      <div class="debrief-title">3. Scorecard vs cash: two different races</div>
       <div class="debrief-note">Equity = cash minus debt plus herd value at the final year's feeder index, the game's
-        own formula and the only outcome measure the class report states (there is no ending-cash figure in the
-        report or the CSV). Where a number here can be checked against the report, it is checked on equity, not cash.</div>
+        own formula and the only outcome measure the class report states.</div>
       <div id="debriefEquityTable"></div>
     </div>
 
     <div class="debrief-card">
-      <div class="debrief-title">4. Cash Bridge: where the money went</div>
+      <div class="debrief-title">4. Cash bridge: where the money went</div>
       <div class="debrief-note">Starting cash is after the ranch purchase. Operating net covers calf and bull-sale
-        revenue less feed, labor, payroll, interest and overhead. Components that cannot be reconstructed from the
-        game log fall into "Other / unexplained" rather than being forced to balance. Cows, semen and deals come
-        from the cash ledger the engine now keeps (shipped 2026-09-10); in a game played before that, those three
-        columns read n/a and their dollars stay in Other. This bridge is computed from engine state, not from any
-        report figure.</div>
+        revenue less feed, labor, payroll, interest and overhead. What the log cannot reconstruct falls into
+        "Other / unexplained" rather than being forced to balance. Cows, semen and deals come from the engine's
+        cash ledger (shipped 2026-09-10); an older game reads n/a there.</div>
       <div id="debriefBridgeTable"></div>
     </div>
 
     <div class="debrief-card">
-      <div class="debrief-title">5. Default-Board Counterfactual: what if the team had done nothing?</div>
-      <div class="debrief-note">Held fixed: the team's own ranch and region, the actual world and drought/shock path
-        each year, and the team's actual auction purchases (same bulls, same prices). Operations are replaced with
-        the engine default every year: hold herd, no tech, no AI-semen program, no hires, no debt change, and a
-        default cull. Starting genetics are re-drawn (the actual starting genetics roll was never logged), so this
-        is an approximation, not an audited replay.</div>
+      <div class="debrief-title">5. Default-board counterfactual: what if the team had done nothing?</div>
+      <div class="debrief-note">Held fixed: the team's own ranch and region, the actual world and drought path,
+        and its actual auction purchases. Operations are replaced with the engine default every year. Starting
+        genetics are re-drawn, so this is an approximation, not an audited replay.</div>
       <div id="debriefCfTable"></div>
     </div>
   </section>
 </main>
+</div>
 
-<!-- supabase-js v2 UMD from jsdelivr, pinned -->
+<div id="lineupView" role="dialog" aria-label="Lineup"></div>
+<script src="assets/bulls/manifest.js?v=2"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.8/dist/umd/supabase.min.js"></script>
 <script src="config.js?v=0a671f3bf9"></script>
 <script src="bull-catalog.js?v=5d3dd3d5ad"></script>
-<script src="engine.js?v=ac44d7bd8c"></script>
-<script src="recap.js?v=67b2825eaf"></script>
+<script src="engine.js?v=d20afd4da3"></script>
+<script src="recap.js?v=b31cdfe473"></script>
 <script>
 'use strict';
 
@@ -343,6 +319,31 @@ function randCode() {
 function setPhaseChip(phase) {
   document.getElementById('phaseChip').textContent = phase;
 }
+// ---- Projector lineup (presentational, read-only): all of this year's bulls on one screen.
+// Photos are the stock set by lot index, the same mapping team.html uses. ----
+let LINEUP_ON = false;
+function showLineup(on) {
+  LINEUP_ON = !!on;
+  renderLineup();
+}
+function renderLineup() {
+  const el = document.getElementById('lineupView'); if (!el) return;
+  el.classList.toggle('on', LINEUP_ON);
+  if (!LINEUP_ON) return;
+  const photos = window.BULL_PHOTOS || [];
+  const cards = (BULLS || []).map((b, idx) =>
+    `<div class="lu-lot">` +
+      (photos.length ? `<img src="${photos[idx % photos.length]}" alt="">` : `<div></div>`) +
+      `<div><div class="lu-no">Lot ${idx + 1} &middot; <span class="tag tag-${esc(b.tier)}">${esc(b.tier)}</span></div>` +
+      `<h3>${esc(b.name || b.sire)}</h3>` +
+      (b.name ? `<div class="lu-sire">by ${esc(b.sire)}</div>` : '') +
+      `<div class="lu-num"><span>guide $${Math.round(b.anchor * 0.70).toLocaleString()} to $${Math.round(b.anchor * 1.50).toLocaleString()}</span><b>reserve $${Math.round(b.reserve).toLocaleString()}</b></div></div>` +
+    `</div>`).join('');
+  el.innerHTML = `<div class="lu-top"><b>Bull Market</b><span class="lu-sub">Year ${CUR_YEAR} sale &middot; ${(BULLS || []).length} bulls</span>` +
+    `<button type="button" onclick="showLineup(false)">Close</button></div>` +
+    `<div class="lu-grid">${cards || '<p class="mute">No bulls for this year yet.</p>'}</div>`;
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && LINEUP_ON) showLineup(false); });
 function showSection(id) {
   ['secCreate','secLobby','secMarket','secBoard','secAuction','secLeaderboard','secDebrief'].forEach(s => {
     document.getElementById(s).style.display = (s === id || id === null) ? '' : 'none';
@@ -734,11 +735,39 @@ async function openYear() {
   openingYear = false;
 }
 
+// How many outfits can actually bid in this year's sale: every live human team, plus AI
+// teams whose archetype bids at all (passive has bidCashCap 0 and never does), minus
+// anyone already busted. This is the number bullsForYear sizes the book against, so it
+// must be read fresh at the moment the book is written rather than cached from the lobby:
+// teams bust mid-game, and a sale catalogued for a room that has shrunk is exactly the
+// problem being fixed. Falls back to the shipped flat book if the read fails, so a
+// transient network error cannot silently produce a three-lot sale for a full class.
+async function countBidders() {
+  try {
+    const { data: teams } = await supa.from('teams').select('archetype,is_ai,state').eq('game_id', GAME_ID);
+    if (!teams || !teams.length) return 0;
+    const n = teams.filter(t => {
+      if (isBusted(t)) return false;
+      if (!t.is_ai) return true;
+      const arch = RanchEngine.ARCHETYPES[t.archetype];
+      return !!(arch && arch.bidCashCap > 0);
+    }).length;
+    return n;
+  } catch (e) {
+    console.warn('countBidders failed; falling back to the flat book', e);
+    return 0; // bullsForYear treats 0 as "no count given" and returns BULLS_PER_YEAR
+  }
+}
+
 // Generate and insert this year's bull lots (real Red Bluff names, no dup within a sale).
+// The book is sized to who can actually bid this year (9/11): a flat six lots drowned a
+// solo game against five bots, where 15 of 28 lots no-saled. See bullsForYear.
 async function generateBulls(world) {
   const bullRows = [];
   const usedNames = new Set();
-  for (let i = 0; i < (RanchEngine.bullsForYear ? RanchEngine.bullsForYear(world.year || CUR_YEAR) : RanchEngine.BULLS_PER_YEAR); i++) {
+  for (let i = 0; i < (RanchEngine.bullsForYear
+        ? RanchEngine.bullsForYear(world.year || CUR_YEAR, await countBidders())
+        : RanchEngine.BULLS_PER_YEAR); i++) {
     let b = RanchEngine.makeBull(world);
     for (let tries = 0; b.name && usedNames.has(b.name) && tries < 25; tries++) b = RanchEngine.makeBull(world);
     if (b.name) usedNames.add(b.name);
@@ -936,6 +965,7 @@ async function refreshAuction() {
   allBids.forEach(b => { bidCount[b.bull_id] = (bidCount[b.bull_id] || 0) + 1; });
 
   renderAuction(BULLS, bidCount, humanCount, teamMap);
+  if (LINEUP_ON) renderLineup();
   renderAdminDeals(teamMap);
 }
 
@@ -953,7 +983,7 @@ async function renderAdminDeals(teamMap) {
     return `<tr><td>${nm(d.proposer_team)} &rarr; ${nm(d.partner_team)}</td>` +
       `<td>${label[d.type] || d.type}${amt}</td>` +
       `<td><span class="tag">${d.status}</span></td>` +
-      `<td><button class="secondary" style="padding:0.2rem 0.6rem;font-size:0.75rem" onclick="voidDeal('${d.id}')">Void</button></td></tr>`;
+      `<td><button class="secondary" style="min-height:2rem;padding:0 0.6rem;font-size:0.75rem" onclick="voidDeal('${d.id}')">Void</button></td></tr>`;
   }).join('');
   el.innerHTML = `<div style="font-family:var(--mono);font-size:0.7rem;color:var(--accent);letter-spacing:0.06em;margin-bottom:0.3rem">TEAM DEALS THIS YEAR (settle at resolve)</div>` +
     `<table style="width:100%;font-size:0.82rem"><thead><tr><th>Between</th><th>Deal</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -1046,7 +1076,12 @@ async function resolveAuction() {
                         tierIdx: RanchEngine.TIER.findIndex(x => x.key === bull.tier) };
       const est = RanchEngine.bullEstValue(state, world, bullObj, yearsLeft);
       const noise = Math.exp((Math.random() * 2 - 1) * (arch.estNoise || 0.16));
-      const bid = Math.min(est * arch.shade * noise, state.cash * arch.bidCashCap);
+      // bid against borrowing capacity, not the chequing account (9/11). Raw cash meant an
+      // outfit $6,000 overdrawn with $3M of equity bid nothing, which is what emptied the
+      // ring in years 3-5 of game AHGEX. Falls back to cash if an older engine is served.
+      const capacity = RanchEngine.bidCapacity
+        ? RanchEngine.bidCapacity(state, world) : state.cash;
+      const bid = Math.min(est * arch.shade * noise, capacity * arch.bidCashCap);
       if (bid >= bull.reserve) aiBids.push({ team_id: team.id, amount: bid });
     }
 
@@ -1127,6 +1162,37 @@ async function settleDeals(world) {
   }
 }
 
+// Per-year dual rank for the yearHistory snapshots. Scorecard rank weighs each outfit's
+// KPI mix against its OWN archetype weights (RanchEngine.scoreGame, the same rule as
+// computeTrueRank and the class report); cash rank is the plain descending cash sort the
+// room actually watches. Entries are [{id, st, w2}]. scoreGame is relative on two KPIs
+// (costEff and resilience use the median across the ranches handed to it), so every
+// still-running outfit in the year goes in one call. Falls back to the cash order for the
+// scorecard if scoreGame throws, so a resolve never dies on a scoring bug.
+function perYearRanks(entries, world) {
+  const byCash = [...entries].sort((a, b) => b.st.cash - a.st.cash);
+  const cashRankOf = {};
+  byCash.forEach((r, i) => { cashRankOf[r.id] = i + 1; });
+  let scoreRankOf = null;
+  try {
+    const w = entries.length ? entries[0].w2 : (world || RanchEngine.newWorld());
+    // shallow copies only, so the year-0 baseline call (where maxDrawdown has not been
+    // written yet) does not produce a NaN resilience KPI, and so scoring never touches
+    // the state blob about to be persisted
+    const scores = RanchEngine.scoreGame(
+      entries.map(r => Object.assign({}, r.st, { maxDrawdown: r.st.maxDrawdown || 0 })), w);
+    if (scores && scores.length === entries.length && scores.every(v => Number.isFinite(v))) {
+      const byScore = entries.map((r, i) => ({ id: r.id, score: scores[i] }))
+        .sort((a, b) => b.score - a.score);
+      scoreRankOf = {};
+      byScore.forEach((x, i) => { scoreRankOf[x.id] = i + 1; });
+    }
+  } catch (e) {
+    console.warn('per-year scoreGame failed, falling back to the cash order for rank', e);
+  }
+  return { scoreRankOf: scoreRankOf || cashRankOf, cashRankOf };
+}
+
 async function runProductionYear(world) {
   const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
   const results = [];
@@ -1164,10 +1230,12 @@ async function runProductionYear(world) {
   }
   // Per-year snapshot for the recap/trajectory sparklines, stored on the team row's own
   // state blob (no schema migration needed: state is already an arbitrary JSON column).
-  // rank is by cash, the same public score Standings/Leaderboard already default to.
-  const ranked = [...results].sort((a, b) => b.st.cash - a.st.cash);
-  const rankOf = {};
-  ranked.forEach((r, i) => { rankOf[r.id] = i + 1; });
+  // DUAL RANK per year (Steven 9/11). This used to be a cash sort alone, so a team playing
+  // its archetype well saw the same middling number every year while its scorecard position
+  // was climbing. The 9/10 dual-rank work fixed Standings and the final debrief and missed
+  // this one. `rank` is now the archetype scorecard (the same rule computeTrueRank and the
+  // class report use); `cashRank` carries the old number alongside it.
+  const { scoreRankOf, cashRankOf } = perYearRanks(results, world);
   for (const r of results) {
     const util = RanchEngine.utilization(r.st, r.w2);
     r.st.yearHistory = r.st.yearHistory || [];
@@ -1176,7 +1244,8 @@ async function runProductionYear(world) {
     // "closed at" line describes the year that ended, not the year now opening.
     r.st.yearHistory.push({
       year: CUR_YEAR, cash: r.st.cash, herd: r.st.herd,
-      beef: RanchEngine.dollarBeef(r.st.g), exploited: util * 100, rank: rankOf[r.id],
+      beef: RanchEngine.dollarBeef(r.st.g), exploited: util * 100,
+      rank: scoreRankOf[r.id], cashRank: cashRankOf[r.id],
       world: worldSnap(r.w2),
     });
     await supa.from('teams').update({ state: JSON.parse(JSON.stringify(r.st, setReplacer)) }).eq('id', r.id);
@@ -1210,23 +1279,21 @@ async function liquidateTeam(team, st, world) {
 
 // One-time year-0 baseline snapshot for every team (human or AI) that does not already
 // have one, so the trajectory sparklines start from the post-purchase ranch instead of a
-// single flat point. Rank uses cash, the same public metric the later per-year snapshots
-// and Standings/Leaderboard use.
+// single flat point. Dual rank, same as the later per-year snapshots (perYearRanks).
 async function writeBaselineSnapshots() {
   const { data: teams } = await supa.from('teams').select('*').eq('game_id', GAME_ID);
   const revived = (teams || []).filter(t => t.state).map(t => ({ id: t.id, st: reviveState(t.state) }));
   const missing = revived.filter(x => !(x.st.yearHistory && x.st.yearHistory.length));
   if (!missing.length) return;
-  const ranked = [...revived].sort((a, b) => b.st.cash - a.st.cash);
-  const rankOf = {};
-  ranked.forEach((r, i) => { rankOf[r.id] = i + 1; });
   const w0 = RanchEngine.newWorld();
+  const { scoreRankOf, cashRankOf } = perYearRanks(revived.map(x => ({ id: x.id, st: x.st, w2: w0 })), w0);
   for (const x of missing) {
     let util = 0;
     try { util = RanchEngine.utilization(x.st, w0); } catch (e) { util = 0; }
     x.st.yearHistory = [{
       year: 0, cash: x.st.cash, herd: x.st.herd,
-      beef: RanchEngine.dollarBeef(x.st.g), exploited: util * 100, rank: rankOf[x.id],
+      beef: RanchEngine.dollarBeef(x.st.g), exploited: util * 100,
+      rank: scoreRankOf[x.id], cashRank: cashRankOf[x.id],
     }];
     await supa.from('teams').update({ state: JSON.parse(JSON.stringify(x.st, setReplacer)) }).eq('id', x.id);
   }
@@ -1284,20 +1351,20 @@ function adminCattlemensWeekly(w, bulls, teams, nameById, yr) {
   const states = teams.map(t => ({ name: t.name, st: t.state ? reviveState(t.state) : null }))
     .filter(x => x.st && !(x.st.busted && x.st.busted.year < yr));
   const bustLine = states.filter(x => x.st.busted && x.st.busted.year === yr).map(x =>
-    `<div style="font-size:0.85rem;color:var(--rust);margin-top:0.4rem"><b>${esc(x.name)}</b> went under this year` +
+    `<div style="font-size:0.85rem;color:var(--ink);margin-top:0.4rem"><b>${esc(x.name)}</b> went under this year` +
     (x.st.busted.bullsToRing ? `; ${x.st.busted.bullsToRing} herd sire${x.st.busted.bullsToRing === 1 ? '' : 's'} go to next year's ring as liquidation lots.` : '.') + `</div>`).join('');
   const rows = states.filter(x => !x.st.busted).slice().sort((a, b) => b.st.herd - a.st.herd).map(x =>
     `<tr><td>${esc(x.name)}</td>` +
-    `<td style="font-family:monospace">${x.st.herd.toLocaleString()}</td>` +
-    `<td style="font-family:monospace">${(x.st.bulls || []).filter(b => yr - b.boughtYear < 4).length}</td>` +
-    `<td style="font-family:monospace">${Math.round(x.st.rep || 0)}</td></tr>`).join('');
-  return `<div style="border:1px solid var(--border);border-radius:5px;background:#fff;padding:0.85rem 1rem;margin-bottom:0.9rem">` +
-    `<div style="font-family:Georgia,serif;font-weight:700;font-size:1.02rem;color:var(--rust);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.5rem">` +
-    `The Cattlemen's Weekly <span style="font-family:monospace;font-weight:400;font-size:0.68rem;color:var(--muted);letter-spacing:0.08em">YEAR ${yr} WRAP</span></div>` +
-    `<div style="font-size:0.85rem">Feeder index closed at <b style="font-family:monospace">${(w.feederIdx || 1).toFixed(2)}</b> under ${esc(w.drought)} drought conditions. ` +
+    `<td style="font-family:var(--font-mono)">${x.st.herd.toLocaleString()}</td>` +
+    `<td style="font-family:var(--font-mono)">${(x.st.bulls || []).filter(b => yr - b.boughtYear < 4).length}</td>` +
+    `<td style="font-family:var(--font-mono)">${Math.round(x.st.rep || 0)}</td></tr>`).join('');
+  return `<div style="border:1px solid var(--border);border-radius:5px;background:var(--card);padding:0.85rem 1rem;margin-bottom:0.9rem">` +
+    `<div style="font-family:var(--font-head);font-weight:700;font-size:1.02rem;color:var(--ink);border-bottom:1px solid var(--border);padding-bottom:0.35rem;margin-bottom:0.5rem">` +
+    `The Cattlemen's Weekly <span style="font-family:var(--font-mono);font-weight:400;font-size:0.68rem;color:var(--muted);letter-spacing:0.08em">YEAR ${yr} WRAP</span></div>` +
+    `<div style="font-size:0.85rem">Feeder index closed at <b style="font-family:var(--font-mono)">${(w.feederIdx || 1).toFixed(2)}</b> under ${esc(w.drought)} drought conditions. ` +
     (sold.length
-      ? `The bull sale grossed <b style="font-family:monospace">$${Math.round(gross).toLocaleString()}</b> on ${sold.length} of ${bulls.length} lots` +
-        (top ? `, topped by ${esc(top.name || top.sire)} at <b style="font-family:monospace">$${Math.round(top.price).toLocaleString()}</b> to ${esc(nameById[top.winner_team] || 'a ranch')}.` : `.`)
+      ? `The bull sale grossed <b style="font-family:var(--font-mono)">$${Math.round(gross).toLocaleString()}</b> on ${sold.length} of ${bulls.length} lots` +
+        (top ? `, topped by ${esc(top.name || top.sire)} at <b style="font-family:var(--font-mono)">$${Math.round(top.price).toLocaleString()}</b> to ${esc(nameById[top.winner_team] || 'a ranch')}.` : `.`)
       : `Every lot in the bull sale went home unsold, a no-sale year.`) + `</div>` + bustLine +
     `<table style="width:100%;margin-top:0.55rem;font-size:0.85rem"><thead><tr><th>Outfit</th><th>Herd</th><th>Herd sires</th><th>Rep</th></tr></thead>` +
     `<tbody>${rows}</tbody></table></div>`;
@@ -1326,7 +1393,7 @@ async function renderAdminRecapBlock() {
   // rival table only (still cash-only, still public)
   const traj = window.Recap ? window.Recap.trajectoryBlock(null, allTeamsHist) : '';
   el.innerHTML = `<details open style="margin-bottom:0.9rem">` +
-    `<summary style="cursor:pointer;font-family:Georgia,serif;font-weight:700;color:var(--rust);padding:0.3rem 0">Cattlemen's Weekly, Year ${priorYear} wrap (projector)</summary>` +
+    `<summary style="cursor:pointer;font-family:var(--font-head);font-weight:700;color:var(--ink);padding:0.3rem 0">Cattlemen's Weekly, Year ${priorYear} wrap (projector)</summary>` +
     weekly + traj + `</details>`;
 }
 
@@ -1485,7 +1552,7 @@ function renderOTable(teams, rankOf) {
     '<div class="debrief-note">No team state to read.</div>'; return; }
   const trs = rows.map(({ t, o }) => {
     const byYear = o.hist.map((u, i) =>
-      `<span style="${u < 0.999 ? 'color:var(--rust);font-weight:bold' : 'color:var(--muted)'}">Y${i + 1} ${Math.round(u * 100)}%</span>`
+      `<span style="${u < 0.999 ? 'color:var(--ink);font-weight:bold' : 'color:var(--muted)'}">Y${i + 1} ${Math.round(u * 100)}%</span>`
     ).join('&nbsp; ');
     const worstTxt = o.worst == null ? '-'
       : `${pct(o.worst)}${o.worstYear ? ' (Y' + o.worstYear + ')' : ''}`;
@@ -1505,7 +1572,7 @@ function renderOTable(teams, rankOf) {
       `<td style="text-align:left;font-size:0.85rem">${byYear || '-'}</td></tr>`;
   }).join('');
   document.getElementById('debriefOTable').innerHTML =
-    `<table class="debrief-table"><thead><tr><th>Team</th><th>Herd sires owned</th><th>Hands</th>` +
+    `<table class="debrief-table dense"><thead><tr><th>Team</th><th>Herd sires owned</th><th>Hands</th>` +
     `<th>Mean exploited</th><th>Worst year</th><th>Realised at worst</th><th>Stockmanship</th>` +
     `<th>Tech (load)</th><th style="text-align:left">Exploited by year</th></tr></thead>` +
     `<tbody>${trs}</tbody></table>`;
@@ -1536,7 +1603,7 @@ function renderBidTable(teams, bulls, bids, rankOf) {
       `<td style="text-align:left;font-size:0.85rem">${perYearTxt || '-'}</td></tr>`;
   }).join('');
   document.getElementById('debriefBidTable').innerHTML =
-    `<table class="debrief-table"><thead><tr><th>Team</th><th>Bids placed</th>` +
+    `<table class="debrief-table dense"><thead><tr><th>Team</th><th>Bids placed</th>` +
     `<th>Median ratio (bids placed)</th><th>Bulls won</th><th>Avg ratio (bulls won)</th>` +
     `<th>Winner's-curse gap</th><th>Worst winning bid</th><th>Winning bids over fair</th>` +
     `<th style="text-align:left">By year (bids placed)</th></tr></thead>` +
@@ -1617,7 +1684,7 @@ function renderBridgeTable(teams, bulls, rankOf) {
   }).join('');
   const anyLegacy = rows.some(x => x.b && x.b.legacy);
   document.getElementById('debriefBridgeTable').innerHTML =
-    `<table class="debrief-table"><thead><tr><th>Team</th><th>Starting cash</th><th>Operating net</th>` +
+    `<table class="debrief-table dense"><thead><tr><th>Team</th><th>Starting cash</th><th>Operating net</th>` +
     `<th>Bulls bought</th><th>Tech</th><th>Cows</th><th>Semen</th><th>Deals</th><th>Debt</th>` +
     `<th>Other / unexplained</th><th>Ending cash</th></tr></thead>` +
     `<tbody>${trs}</tbody></table>` +
@@ -1669,7 +1736,7 @@ function renderEquityTable(teams, finalWorld, rankOf, cashRankOf) {
       `<td class="${changeClass}">${e.dollarChange >= 0 ? '+' : ''}${dollars(e.dollarChange)} (${pctTxt})</td></tr>`;
   }).join('');
   document.getElementById('debriefEquityTable').innerHTML =
-    `<table class="debrief-table"><thead><tr><th>Team</th><th>Scorecard rank (cash rank)</th>` +
+    `<table class="debrief-table dense"><thead><tr><th>Team</th><th>Scorecard rank (cash rank)</th>` +
     `<th>Starting equity</th><th>Ending equity</th><th>Equity change</th></tr></thead>` +
     `<tbody>${trs}</tbody></table>`;
 }
@@ -1733,7 +1800,7 @@ function renderCfTable(teams, ranchesAll, bulls, rankOf, cfByTeam) {
       `<td class="${deltaClass}">${deltaTxt}</td></tr>`;
   }).join('');
   document.getElementById('debriefCfTable').innerHTML =
-    `<table class="debrief-table"><thead><tr><th>Team</th><th>Actual ending cash</th>` +
+    `<table class="debrief-table dense"><thead><tr><th>Team</th><th>Actual ending cash</th>` +
     `<th>Default-board ending cash</th><th>Actual minus default</th></tr></thead>` +
     `<tbody>${trs}</tbody></table>`;
 }
